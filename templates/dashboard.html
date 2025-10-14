@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhatsApp Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+@keyframes pulse-ring{0%{box-shadow:0 0 0 0 rgba(34,197,94,.5)}100%{box-shadow:0 0 0 10px rgba(34,197,94,0)}}
+.pulse-dot{animation:pulse-ring 1.5s cubic-bezier(.455,.03,.515,.955) infinite}
+.scrollbar-thin::-webkit-scrollbar{width:6px}
+.scrollbar-thin::-webkit-scrollbar-track{background:transparent}
+.scrollbar-thin::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2);border-radius:3px}
+</style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 min-h-screen">
+
+<!-- Preview Modal -->
+<div id="previewModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4" onclick="if(event.target===this)closePreview()">
+<div class="bg-slate-800 rounded-2xl shadow-2xl border border-white/20 w-full max-w-xl max-h-[80vh] flex flex-col">
+<div class="bg-gradient-to-r from-purple-600 to-pink-600 p-3 rounded-t-2xl flex justify-between items-center">
+<h2 class="text-lg font-bold text-white">👁️ Kişi Önizleme</h2>
+<button onclick="closePreview()" class="text-white hover:bg-white/20 p-1 rounded-lg text-2xl leading-none">✕</button>
+</div>
+<div class="p-4 overflow-y-auto scrollbar-thin flex-1">
+<div id="previewStats" class="bg-white/5 rounded-lg p-3 mb-3">
+<div class="grid grid-cols-3 gap-3 text-center">
+<div><p class="text-gray-400 text-xs">Seçilecek</p><p class="text-white text-xl font-bold" id="previewSelected">0</p></div>
+<div><p class="text-gray-400 text-xs">Uygun</p><p class="text-white text-xl font-bold" id="previewEligible">0</p></div>
+<div><p class="text-gray-400 text-xs">Toplam</p><p class="text-white text-xl font-bold" id="previewTotal">0</p></div>
+</div>
+</div>
+<div id="previewList" class="space-y-2"></div>
+</div>
+</div>
+</div>
+
+<!-- Live Log Modal -->
+<div id="liveLogModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4" onclick="if(event.target===this)closeLiveLog()">
+<div class="bg-slate-800 rounded-2xl shadow-2xl border border-white/20 w-full max-w-3xl max-h-[85vh] flex flex-col">
+<div class="bg-gradient-to-r from-green-600 to-emerald-600 p-3 rounded-t-2xl flex justify-between items-center">
+<h2 class="text-lg font-bold text-white">📊 Canlı Gönderim Takibi</h2>
+<button onclick="closeLiveLog()" class="text-white hover:bg-white/20 p-1 rounded-lg text-2xl leading-none">✕</button>
+</div>
+<div class="flex-1 p-4 overflow-y-auto scrollbar-thin bg-black/40 font-mono text-xs">
+<div id="liveLogContent" class="space-y-1 text-green-400"></div>
+</div>
+<div class="bg-white/5 p-3 border-t border-white/10">
+<div class="flex justify-between items-center">
+<div>
+<p class="text-gray-400 text-xs">İlerleme: <span id="logProgress" class="text-white font-bold">0 / 0</span></p>
+<p class="text-gray-400 text-xs">Durum: <span id="logStatus" class="text-green-400 font-bold">Bekliyor</span></p>
+</div>
+<button onclick="stopBulkSend()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium text-sm">
+⏸️ Durdur
+</button>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Chat Modal -->
+<div id="chatModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4" onclick="if(event.target===this)closeChat()">
+<div class="bg-slate-800 rounded-2xl shadow-2xl border border-white/20 w-full max-w-5xl max-h-[90vh] flex flex-col">
+<div class="bg-gradient-to-r from-green-600 to-emerald-600 p-3 rounded-t-2xl flex justify-between items-center">
+<h2 class="text-lg font-bold text-white">💬 Chat Geçmişi</h2>
+<button onclick="closeChat()" class="text-white hover:bg-white/20 p-1 rounded-lg text-2xl leading-none">✕</button>
+</div>
+<div class="flex flex-1 overflow-hidden">
+<div class="w-1/3 border-r border-white/10 overflow-y-auto scrollbar-thin">
+<div class="p-4"><input type="text" id="chatSearch" placeholder="Kişi ara..." class="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500"></div>
+<div id="contactList" class="px-2"><p class="text-gray-400 text-center py-4">Yükleniyor...</p></div>
+</div>
+<div class="flex-1 flex flex-col">
+<div id="chatMessages" class="flex-1 overflow-y-auto scrollbar-thin p-6">
+<p class="text-gray-400 text-center">Bir sohbet seçin</p>
+</div>
+<div id="sendSingleForm" class="hidden bg-white/5 border-t border-white/10 p-4">
+<div class="mb-3">
+<div class="flex gap-2 mb-2">
+<button onclick="setMessageType('text')" id="btnText" class="flex-1 bg-blue-500 text-white py-2 rounded-lg text-sm font-medium">✍️ Text</button>
+<button onclick="setMessageType('image')" id="btnImage" class="flex-1 bg-purple-500/50 text-white py-2 rounded-lg text-sm font-medium">🖼️ Image</button>
+<button onclick="setMessageType('template')" id="btnTemplate" class="flex-1 bg-green-500/50 text-white py-2 rounded-lg text-sm font-medium">📋 Şablon</button>
+</div>
+</div>
+
+<!-- Text Form -->
+<div id="textForm" class="space-y-2">
+<textarea id="textMessage" placeholder="Mesajınızı yazın..." rows="3" class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 resize-none"></textarea>
+<button onclick="sendTextMessage()" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg font-medium">📤 Gönder</button>
+</div>
+
+<!-- Image Form -->
+<div id="imageForm" class="hidden space-y-2">
+<div class="flex gap-2">
+<input type="text" id="imageUrl" placeholder="Image URL (https://...)" class="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-purple-500 text-sm">
+<label class="bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 text-purple-300 px-3 py-2 rounded-lg cursor-pointer text-sm font-medium whitespace-nowrap flex items-center">
+📁 Dosya
+<input type="file" id="imageFile" accept="image/*" class="hidden" onchange="handleImageUpload(event)">
+</label>
+</div>
+<textarea id="imageCaptionText" placeholder="Mesaj + açıklama (opsiyonel)" rows="2" class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-purple-500 resize-none text-sm"></textarea>
+<p id="imagePreview" class="text-xs text-gray-400"></p>
+<button onclick="sendImageMessage()" class="w-full bg-purple-500 hover:bg-purple-600 text-white py-2 rounded-lg font-medium">🖼️ Gönder</button>
+</div>
+
+<!-- Template Form -->
+<div id="templateForm" class="hidden space-y-2">
+<input type="text" id="singleTemplate" placeholder="Şablon adı" class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500 text-sm">
+<div class="bg-white/5 border border-white/10 rounded-lg p-2 space-y-2">
+<label class="text-white text-xs font-medium">🖼️ Header Image (Opsiyonel)</label>
+<div class="flex gap-2">
+<input type="text" id="singleHeaderImageId" value="780517088218949" placeholder="Image ID" class="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 text-xs focus:ring-2 focus:ring-purple-500">
+<label class="bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 text-purple-300 px-2 py-2 rounded-lg cursor-pointer text-xs font-medium whitespace-nowrap flex items-center">
+📁 Yükle
+<input type="file" id="singleHeaderImageFile" accept="image/*" class="hidden" onchange="uploadSingleHeaderImage(event)">
+</label>
+</div>
+<p id="singleHeaderImageStatus" class="text-xs text-gray-400"></p>
+</div>
+<button onclick="sendTemplateMessage()" class="w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded-lg font-medium">📋 Gönder</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Header -->
+<header class="bg-black/30 backdrop-blur-sm border-b border-white/10 sticky top-0 z-40">
+<div class="container mx-auto px-4 py-4 flex justify-between items-center">
+<div class="flex items-center space-x-4">
+<div class="bg-gradient-to-r from-green-500 to-emerald-500 p-3 rounded-xl">
+<svg class="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+</div>
+<div>
+<h1 class="text-2xl font-bold text-white">WhatsApp Cloud API</h1>
+<p class="text-sm text-gray-400">vina-supermasculine-afterwards.ngrok-free.dev/webhook</p>
+</div>
+</div>
+<div class="flex items-center space-x-4">
+<button onclick="openChat()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium flex items-center space-x-2">
+<span>💬</span><span>Chat</span>
+</button>
+<div class="flex items-center space-x-2">
+<div class="bg-green-500 pulse-dot w-3 h-3 rounded-full"></div>
+<span class="text-green-400 text-sm font-medium">Aktif</span>
+</div>
+</div>
+</div>
+</header>
+
+<div class="container mx-auto px-4 py-8">
+<!-- Stats -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+<div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-6 shadow-2xl transform hover:scale-105 transition">
+<p class="text-blue-100 text-sm mb-1">Toplam Kişi</p>
+<p class="text-white text-4xl font-bold" id="totalContacts">-</p>
+</div>
+<div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-6 shadow-2xl transform hover:scale-105 transition">
+<p class="text-purple-100 text-sm mb-1">Şablon</p>
+<p class="text-white text-4xl font-bold" id="totalTemplates">-</p>
+</div>
+<div class="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl p-6 shadow-2xl transform hover:scale-105 transition">
+<p class="text-emerald-100 text-sm mb-1">Gönderilen</p>
+<p class="text-white text-4xl font-bold" id="totalSent">-</p>
+</div>
+<div class="bg-gradient-to-br from-pink-500 to-pink-600 rounded-2xl p-6 shadow-2xl transform hover:scale-105 transition">
+<p class="text-pink-100 text-sm mb-1">Gelen</p>
+<p class="text-white text-4xl font-bold" id="totalIncoming">-</p>
+</div>
+</div>
+
+<!-- Main Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+<!-- Left Panel -->
+<div class="space-y-6">
+<!-- Bulk Send -->
+<div class="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
+<h2 class="text-xl font-bold text-white mb-4">📤 Toplu Mesaj</h2>
+
+<!-- CSV Upload -->
+<div class="mb-4">
+<label class="block text-sm text-gray-300 mb-2">📁 CSV Yükle</label>
+<input type="file" id="csvFile" accept=".csv" class="hidden">
+<button onclick="document.getElementById('csvFile').click()" class="w-full bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50 text-blue-300 py-2 rounded-lg transition">
+CSV Dosyası Seç
+</button>
+<p id="csvStatus" class="text-xs text-gray-400 mt-1"></p>
+</div>
+
+<form id="sendForm" class="space-y-3">
+<input type="text" id="templateName" placeholder="Şablon adı" required class="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-green-500">
+<input type="number" id="limit" value="225" min="1" max="1000" required class="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-green-500">
+<select id="languageCode" class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-green-500 transition">
+<option value="en_US" class="bg-slate-800">English (en_US)</option>
+<option value="tr" class="bg-slate-800" selected>Türkçe (tr)</option>
+<option value="ar" class="bg-slate-800">العربية (ar)</option>
+</select>
+
+<div class="bg-white/5 border border-white/10 rounded-lg p-3 space-y-2">
+<label class="text-white text-sm font-medium">🖼️ Header Image (Opsiyonel)</label>
+<div class="flex gap-2">
+<input type="text" id="headerImageId" value="780517088218949" placeholder="Image ID" class="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 text-sm focus:ring-2 focus:ring-purple-500">
+<label class="bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 text-purple-300 px-3 py-2 rounded-lg cursor-pointer text-sm font-medium whitespace-nowrap flex items-center">
+📁 Yükle
+<input type="file" id="headerImageFile" accept="image/*" class="hidden" onchange="uploadHeaderImage(event)">
+</label>
+</div>
+<p id="headerImageStatus" class="text-xs text-gray-400"></p>
+</div>
+
+<div class="bg-white/5 border border-white/10 rounded-lg p-3 space-y-2">
+<label class="text-white text-sm font-medium">⏱️ Gönderim Hızı</label>
+<select id="messagesPerMinute" class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-blue-500">
+<option value="20">20 mesaj/dakika (Güvenli)</option>
+<option value="30">30 mesaj/dakika (Orta)</option>
+<option value="40">40 mesaj/dakika (Hızlı)</option>
+<option value="60" selected>60 mesaj/dakika (Maks)</option>
+</select>
+</div>
+
+<div class="flex gap-2">
+<button type="button" onclick="previewRecipients()" class="flex-1 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 text-purple-300 py-2 rounded-lg transition">
+👁️ Önizle
+</button>
+<button type="submit" id="sendBulkBtn" class="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2 rounded-lg transition">
+Gönder
+</button>
+</div>
+<button type="button" id="stopBulkBtn" onclick="stopBulkSend()" class="hidden w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 rounded-lg transition">
+⏸️ Durdur
+</button>
+</form>
+
+<!-- Progress -->
+<div id="bulkProgress" class="hidden mt-4">
+<div class="bg-white/5 rounded-lg p-3 mb-2">
+<div class="flex justify-between text-xs text-gray-300 mb-1">
+<span id="progressText">0 / 0</span>
+<span id="progressPercent">0%</span>
+</div>
+<div class="bg-white/10 rounded-full h-2">
+<div id="progressBar" class="bg-green-500 h-2 rounded-full transition-all" style="width:0%"></div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Single Send -->
+<div class="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
+<h2 class="text-xl font-bold text-white mb-4">👤 Tek Kişiye</h2>
+<form id="sendSingleFormMain" class="space-y-3">
+<input type="text" id="singlePhone" placeholder="905551234567" required class="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500">
+<input type="text" id="singleTemplateMain" placeholder="Şablon adı" required class="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500">
+<div class="bg-white/5 border border-white/10 rounded-lg p-3 space-y-2">
+<label class="text-white text-sm font-medium">🖼️ Header Image (Opsiyonel)</label>
+<div class="flex gap-2">
+<input type="text" id="singleMainHeaderImageId" value="780517088218949" placeholder="Image ID" class="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 text-sm focus:ring-2 focus:ring-purple-500">
+<label class="bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 text-purple-300 px-3 py-2 rounded-lg cursor-pointer text-sm font-medium whitespace-nowrap flex items-center">
+📁 Yükle
+<input type="file" id="singleMainHeaderImageFile" accept="image/*" class="hidden" onchange="uploadSingleMainHeaderImage(event)">
+</label>
+</div>
+<p id="singleMainHeaderImageStatus" class="text-xs text-gray-400"></p>
+</div>
+<button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 rounded-lg transition">Gönder</button>
+</form>
+</div>
+
+<!-- History -->
+<div class="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
+<h2 class="text-xl font-bold text-white mb-4">📝 Geçmiş</h2>
+<div id="historyLog" class="space-y-2 max-h-64 overflow-y-auto scrollbar-thin">
+<p class="text-gray-400 text-sm">Yükleniyor...</p>
+</div>
+</div>
+</div>
+
+<!-- Right Panel -->
+<div class="lg:col-span-2 space-y-6">
+<!-- Incoming Messages -->
+<div class="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
+<h2 class="text-xl font-bold text-white mb-4">📨 Gelen Mesajlar</h2>
+<div id="incomingMessages" class="space-y-3 max-h-96 overflow-y-auto scrollbar-thin">
+<p class="text-gray-400 text-sm">Yükleniyor...</p>
+</div>
+</div>
+
+<!-- Status -->
+<div class="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
+<h2 class="text-xl font-bold text-white mb-4">✅ Mesaj Durumları</h2>
+<div id="webhookLog" class="space-y-3 max-h-96 overflow-y-auto scrollbar-thin">
+<p class="text-gray-400 text-sm">Yükleniyor...</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<script>
+let currentChatPhone=null,contactsMap={};
+
+async function loadContactsMap(){
+try{
+const data=await fetch('/api/contacts').then(r=>r.json());
+data.contacts.forEach(c=>contactsMap[c.id]=c.name||c.pushname||c.id);
+}catch(e){console.error(e)}
+}
+
+// CSV Upload
+document.getElementById('csvFile').addEventListener('change',async(e)=>{
+const file=e.target.files[0];
+if(!file)return;
+const formData=new FormData();
+formData.append('file',file);
+try{
+const res=await fetch('/api/upload-csv',{method:'POST',body:formData});
+const data=await res.json();
+if(data.success){
+document.getElementById('csvStatus').textContent=`✅ ${data.new_contacts} yeni kişi eklendi (Toplam: ${data.total_contacts})`;
+loadStats();
+}else{
+document.getElementById('csvStatus').textContent=`❌ ${data.error}`;
+}
+}catch(err){
+document.getElementById('csvStatus').textContent=`❌ ${err.message}`;
+}
+});
+
+// Upload Header Image
+async function uploadHeaderImage(event){
+const file=event.target.files[0];
+if(!file)return;
+if(!file.type.startsWith('image/')){
+alert('⚠️ Sadece resim dosyası yükleyebilirsiniz!');
+return;
+}
+document.getElementById('headerImageStatus').textContent='⏳ Yükleniyor...';
+const reader=new FileReader();
+reader.onload=async(e)=>{
+try{
+const res=await fetch('/api/upload-template-media',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image_base64:e.target.result})});
+const data=await res.json();
+if(data.success){
+document.getElementById('headerImageId').value=data.media_id;
+document.getElementById('headerImageStatus').textContent=`✅ Yüklendi: ${data.media_id}`;
+document.getElementById('headerImageStatus').className='text-xs text-green-400';
+}else{
+document.getElementById('headerImageStatus').textContent=`❌ Hata: ${data.error}`;
+document.getElementById('headerImageStatus').className='text-xs text-red-400';
+}
+}catch(err){
+document.getElementById('headerImageStatus').textContent=`❌ ${err.message}`;
+document.getElementById('headerImageStatus').className='text-xs text-red-400';
+}
+};
+reader.readAsDataURL(file);
+}
+
+// Preview Recipients
+async function previewRecipients(){
+const template=document.getElementById('templateName').value;
+const limit=parseInt(document.getElementById('limit').value);
+if(!template){alert('⚠️ Şablon adı girin!');return;}
+try{
+const res=await fetch('/api/preview-recipients',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({template_name:template,limit})});
+const data=await res.json();
+if(data.success){
+document.getElementById('previewSelected').textContent=data.selected_count;
+document.getElementById('previewEligible').textContent=data.total_eligible;
+document.getElementById('previewTotal').textContent=data.total_contacts;
+const list=document.getElementById('previewList');
+list.innerHTML='';
+data.selected.forEach((c,i)=>{
+list.innerHTML+=`<div class="bg-white/5 border border-white/10 rounded-lg p-2">
+<div class="flex justify-between items-center">
+<span class="text-white text-sm font-medium">${c.name}</span>
+<span class="text-gray-400 text-xs">${c.phone}</span>
+</div>
+</div>`;
+});
+document.getElementById('previewModal').classList.remove('hidden');
+}else{
+alert(`❌ ${data.error}`);
+}
+}catch(err){
+alert(`❌ ${err.message}`);
+}
+}
+
+function closePreview(){
+document.getElementById('previewModal').classList.add('hidden');
+}
+
+// Bulk Send with Live Log
+let bulkStatusInterval=null;
+document.getElementById('sendForm').addEventListener('submit',async(e)=>{
+e.preventDefault();
+const template=document.getElementById('templateName').value;
+const limit=parseInt(document.getElementById('limit').value);
+const language=document.getElementById('languageCode').value;
+const headerImageId=document.getElementById('headerImageId').value;
+const messagesPerMinute=parseInt(document.getElementById('messagesPerMinute').value);
+try{
+const payload={template_name:template,limit,language_code:language,messages_per_minute:messagesPerMinute};
+if(headerImageId){
+payload.header_image_id=headerImageId;
+}
+const res=await fetch('/api/send-bulk-stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+const data=await res.json();
+if(data.success){
+document.getElementById('sendBulkBtn').classList.add('hidden');
+document.getElementById('stopBulkBtn').classList.remove('hidden');
+document.getElementById('bulkProgress').classList.remove('hidden');
+document.getElementById('liveLogModal').classList.remove('hidden');
+startBulkStatusPolling();
+}else{
+alert(`❌ ${data.error}`);
+}
+}catch(err){
+alert(`❌ ${err.message}`);
+}
+});
+
+function startBulkStatusPolling(){
+if(bulkStatusInterval)clearInterval(bulkStatusInterval);
+bulkStatusInterval=setInterval(async()=>{
+try{
+const res=await fetch('/api/bulk-status');
+const data=await res.json();
+const percent=data.total_count>0?Math.round((data.current_progress/data.total_count)*100):0;
+document.getElementById('progressText').textContent=`${data.current_progress} / ${data.total_count}`;
+document.getElementById('progressPercent').textContent=`${percent}%`;
+document.getElementById('progressBar').style.width=`${percent}%`;
+document.getElementById('logProgress').textContent=`${data.current_progress} / ${data.total_count}`;
+document.getElementById('logStatus').textContent=data.is_running?'🔄 Çalışıyor':'✅ Tamamlandı';
+const logContent=document.getElementById('liveLogContent');
+logContent.innerHTML=data.logs.map(log=>`<div>${log}</div>`).join('');
+logContent.scrollTop=logContent.scrollHeight;
+if(!data.is_running){
+clearInterval(bulkStatusInterval);
+bulkStatusInterval=null;
+document.getElementById('sendBulkBtn').classList.remove('hidden');
+document.getElementById('stopBulkBtn').classList.add('hidden');
+loadAll();
+}
+}catch(e){console.error(e)}
+},1000);
+}
+
+async function stopBulkSend(){
+try{
+await fetch('/api/bulk-stop',{method:'POST'});
+document.getElementById('logStatus').textContent='⏸️ Durduruluyor...';
+}catch(err){
+alert(`❌ ${err.message}`);
+}
+}
+
+function closeLiveLog(){
+document.getElementById('liveLogModal').classList.add('hidden');
+}
+
+// Upload Single Main Header Image
+async function uploadSingleMainHeaderImage(event){
+const file=event.target.files[0];
+if(!file)return;
+if(!file.type.startsWith('image/')){
+alert('⚠️ Sadece resim dosyası yükleyebilirsiniz!');
+return;
+}
+document.getElementById('singleMainHeaderImageStatus').textContent='⏳ Yükleniyor...';
+const reader=new FileReader();
+reader.onload=async(e)=>{
+try{
+const res=await fetch('/api/upload-template-media',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image_base64:e.target.result})});
+const data=await res.json();
+if(data.success){
+document.getElementById('singleMainHeaderImageId').value=data.media_id;
+document.getElementById('singleMainHeaderImageStatus').textContent=`✅ ${data.media_id}`;
+document.getElementById('singleMainHeaderImageStatus').className='text-xs text-green-400';
+}else{
+document.getElementById('singleMainHeaderImageStatus').textContent=`❌ ${data.error}`;
+document.getElementById('singleMainHeaderImageStatus').className='text-xs text-red-400';
+}
+}catch(err){
+document.getElementById('singleMainHeaderImageStatus').textContent=`❌ ${err.message}`;
+document.getElementById('singleMainHeaderImageStatus').className='text-xs text-red-400';
+}
+};
+reader.readAsDataURL(file);
+}
+
+document.getElementById('sendSingleFormMain').addEventListener('submit',async(e)=>{
+e.preventDefault();
+const phone=document.getElementById('singlePhone').value;
+const template=document.getElementById('singleTemplateMain').value;
+const headerImageId=document.getElementById('singleMainHeaderImageId').value;
+const btn=e.target.querySelector('button'),orig=btn.textContent;
+btn.disabled=true;btn.textContent='⏳ Gönderiliyor...';
+try{
+const payload={phone_number:phone,template_name:template,language_code:'tr'};
+if(headerImageId){
+payload.header_image_id=headerImageId;
+}
+const res=await fetch('/api/send-single',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+const data=await res.json();
+if(data.success){
+const name=contactsMap[phone]||phone;
+alert(`✅ ${name}'ya gönderildi!\nŞablon: ${template}`);
+document.getElementById('singlePhone').value='';
+document.getElementById('singleTemplateMain').value='';
+document.getElementById('singleMainHeaderImageId').value='780517088218949';
+document.getElementById('singleMainHeaderImageStatus').textContent='';
+}else{
+alert(`❌ Hata!\n${data.error||'Mesaj gönderilemedi'}`);
+}
+}catch(err){
+alert(`❌ Bağlantı Hatası!\n${err.message}`);
+}finally{
+btn.disabled=false;btn.textContent=orig;
+}
+});
+
+async function loadStats(){
+try{
+const[contacts,history,logs]=await Promise.all([
+fetch('/api/contacts').then(r=>r.json()),
+fetch('/api/history').then(r=>r.json()),
+fetch('/api/webhook-logs?limit=1000').then(r=>r.json())
+]);
+document.getElementById('totalContacts').textContent=contacts.total||0;
+document.getElementById('totalTemplates').textContent=Object.keys(history.history||{}).length;
+let total=0;
+for(const r of Object.values(history.history||{}))total+=r.length;
+document.getElementById('totalSent').textContent=total;
+document.getElementById('totalIncoming').textContent=logs.logs.filter(l=>l.type==='incoming_message').length;
+}catch(e){console.error(e)}
+}
+
+async function loadHistory(){
+try{
+const data=await fetch('/api/processed').then(r=>r.json());
+const container=document.getElementById('historyLog');
+container.innerHTML='';
+if(Object.keys(data.processed).length===0){
+container.innerHTML='<p class="text-gray-400 text-sm">Henüz mesaj yok.</p>';
+return;
+}
+for(const[template,recipients]of Object.entries(data.processed)){
+const uniqueRecipients=[...new Set(recipients)];
+container.innerHTML+=`<div class="bg-white/5 border border-white/10 rounded-lg p-3 mb-2">
+<div class="flex justify-between items-center mb-2">
+<span class="text-white font-medium text-sm">${template}</span>
+<span class="bg-emerald-500/30 text-emerald-300 text-xs px-2 py-1 rounded-full font-bold">${uniqueRecipients.length} kişi</span>
+</div>
+<button onclick="showTemplateRecipients('${template}')" class="text-xs text-blue-400 hover:text-blue-300">👁️ İşlenen Kişileri Gör</button>
+</div>`;
+}
+}catch(e){console.error(e)}
+}
+
+async function showTemplateRecipients(template){
+try{
+const data=await fetch('/api/processed').then(r=>r.json());
+const recipients=data.processed[template]||[];
+const uniqueRecipients=[...new Set(recipients)];
+let html=`<div class="space-y-2 max-h-96 overflow-y-auto">`;
+for(const phone of uniqueRecipients){
+const name=contactsMap[phone]||phone;
+html+=`<div class="bg-white/5 border border-white/10 rounded-lg p-2 flex justify-between items-center">
+<span class="text-white text-sm">${name}</span>
+<span class="text-gray-400 text-xs">📱 ${phone}</span>
+</div>`;
+}
+html+=`</div>`;
+alert(`📋 ${template}\n\n✅ ${uniqueRecipients.length} kişiye işlendi (duplicate yok):\n\n${uniqueRecipients.map(p=>`${contactsMap[p]||p} (${p})`).slice(0,10).join('\n')}${uniqueRecipients.length>10?'\n\n... ve '+( uniqueRecipients.length-10)+' kişi daha':''}`)
+}catch(e){console.error(e)}
+}
+
+async function loadIncomingMessages(){
+try{
+const data=await fetch('/api/webhook-logs?limit=100').then(r=>r.json());
+const container=document.getElementById('incomingMessages');
+container.innerHTML='';
+const incoming=data.logs.filter(l=>l.type==='incoming_message').reverse();
+if(incoming.length===0){
+container.innerHTML='<p class="text-gray-400 text-sm">Henüz gelen mesaj yok.</p>';
+return;
+}
+for(const log of incoming){
+const time=new Date(log.timestamp).toLocaleString('tr-TR');
+const text=log.text||'(Medya)';
+const name=contactsMap[log.from]||log.from;
+let mediaPreview='';
+if(log.media_url && log.message_type==='image'){
+mediaPreview=`<img src="${log.media_url}" alt="Image" class="rounded-lg max-w-xs mt-2 cursor-pointer" onclick="window.open('${log.media_url}','_blank')">`;
+}
+container.innerHTML+=`<div class="bg-gradient-to-r from-pink-500/20 to-purple-500/20 border border-pink-500/30 rounded-lg p-4">
+<div class="flex justify-between mb-2">
+<span class="text-pink-300 font-bold">${name}</span>
+<span class="text-xs text-gray-400">${time}</span>
+</div>
+<p class="text-white">${text}</p>
+${mediaPreview}
+<p class="text-xs text-gray-500 mt-1">${log.from}</p>
+</div>`;
+}
+}catch(e){console.error(e)}
+}
+
+async function loadWebhookLogs(){
+try{
+const data=await fetch('/api/webhook-logs?limit=50').then(r=>r.json());
+const container=document.getElementById('webhookLog');
+container.innerHTML='';
+const statuses=data.logs.filter(l=>l.type==='status').reverse();
+if(statuses.length===0){
+container.innerHTML='<p class="text-gray-400 text-sm">Henüz durum yok.</p>';
+return;
+}
+const statusGroups={sent:[],delivered:[],read:[],failed:[]};
+for(const log of statuses){
+const status=log.status;
+if(statusGroups[status]){
+const name=contactsMap[log.recipient]||log.recipient;
+statusGroups[status].push({name,recipient:log.recipient,time:log.timestamp});
+}
+}
+const icons={sent:'✓',delivered:'✓✓',read:'✓✓',failed:'✗'};
+const colors={sent:'text-gray-400',delivered:'text-green-400',read:'text-blue-400',failed:'text-red-400'};
+const bgColors={sent:'bg-gray-500/10 border-gray-500/30',delivered:'bg-green-500/10 border-green-500/30',read:'bg-blue-500/10 border-blue-500/30',failed:'bg-red-500/10 border-red-500/30'};
+const statusText={sent:'Gönderildi',delivered:'Teslim Edildi',read:'Okundu',failed:'Başarısız'};
+for(const[status,items]of Object.entries(statusGroups)){
+if(items.length===0)continue;
+container.innerHTML+=`<div class="${bgColors[status]} border rounded-lg p-3 mb-3">
+<div class="flex justify-between items-center mb-2">
+<span class="${colors[status]} font-bold text-lg">${icons[status]} ${statusText[status]}</span>
+<span class="text-xs text-gray-400">${items.length} mesaj</span>
+</div>
+<div class="space-y-1 max-h-32 overflow-y-auto scrollbar-thin">
+${items.map(item=>`<div class="flex justify-between text-xs"><span class="text-gray-300">${item.name}</span><span class="text-gray-500">${new Date(item.time).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})}</span></div>`).join('')}
+</div>
+</div>`;
+}
+}catch(e){console.error(e)}
+}
+
+async function openChat(){
+document.getElementById('chatModal').classList.remove('hidden');
+await loadChatHistory();
+}
+
+function closeChat(){
+document.getElementById('chatModal').classList.add('hidden');
+}
+
+async function loadChatHistory(){
+try{
+const data=await fetch('/api/chat-history').then(r=>r.json());
+const container=document.getElementById('contactList');
+container.innerHTML='';
+if(data.chats.length===0){
+container.innerHTML='<p class="text-gray-400 text-center py-4">Henüz chat yok.</p>';
+return;
+}
+for(const chat of data.chats){
+const lastMsg=chat.messages[chat.messages.length-1];
+const time=new Date(lastMsg.timestamp).toLocaleString('tr-TR',{hour:'2-digit',minute:'2-digit'});
+container.innerHTML+=`<div onclick="selectChat('${chat.phone}')" class="bg-white/5 hover:bg-white/10 p-3 rounded-lg cursor-pointer mb-2 border border-white/10">
+<div class="flex justify-between items-start mb-1">
+<div>
+<span class="text-white font-medium">${chat.name}</span>
+<p class="text-xs text-gray-400 mt-0.5">📱 ${chat.phone}</p>
+</div>
+<span class="text-xs text-gray-400">${time}</span>
+</div>
+<p class="text-sm text-gray-400 truncate">${lastMsg.text}</p>
+</div>`;
+}
+}catch(e){console.error(e)}
+}
+
+async function selectChat(phone){
+currentChatPhone=phone;
+try{
+const data=await fetch('/api/chat-history').then(r=>r.json());
+const chat=data.chats.find(c=>c.phone===phone);
+if(!chat)return;
+const container=document.getElementById('chatMessages');
+container.innerHTML='';
+for(const msg of chat.messages){
+const time=new Date(msg.timestamp).toLocaleString('tr-TR',{hour:'2-digit',minute:'2-digit'});
+let mediaHtml='';
+if(msg.media_url && msg.message_type==='image'){
+mediaHtml=`<img src="${msg.media_url}" alt="Image" class="rounded-lg max-w-xs mb-2 cursor-pointer" onclick="window.open('${msg.media_url}','_blank')">`;
+}
+if(msg.type==='incoming'){
+container.innerHTML+=`<div class="mb-3 flex justify-start">
+<div class="bg-white/10 rounded-lg p-3 max-w-md">
+${mediaHtml}
+${msg.text?`<p class="text-white text-sm">${msg.text}</p>`:''}
+<p class="text-xs text-gray-400 mt-1">${time}</p>
+</div>
+</div>`;
+}else{
+const statusIcons={sent:'✓',delivered:'✓✓',read:'✓✓',failed:'✗'};
+const statusColors={sent:'text-gray-400',delivered:'text-gray-300',read:'text-blue-400',failed:'text-red-400'};
+const icon=statusIcons[msg.status]||'✓';
+const color=statusColors[msg.status]||'text-gray-400';
+container.innerHTML+=`<div class="mb-3 flex justify-end">
+<div class="bg-green-500/30 border border-green-500/50 rounded-lg p-3 max-w-md">
+${mediaHtml}
+${msg.text?`<p class="text-white text-sm">${msg.text}</p>`:''}
+<p class="text-xs ${color} mt-1 text-right flex items-center justify-end gap-1">${time} <span>${icon}</span></p>
+</div>
+</div>`;
+}
+}
+container.scrollTop=container.scrollHeight;
+document.getElementById('sendSingleForm').classList.remove('hidden');
+}catch(e){console.error(e)}
+}
+
+// Message Type Switch
+function setMessageType(type){
+document.getElementById('textForm').classList.add('hidden');
+document.getElementById('imageForm').classList.add('hidden');
+document.getElementById('templateForm').classList.add('hidden');
+document.getElementById('btnText').className='flex-1 bg-blue-500/50 text-white py-2 rounded-lg text-sm font-medium';
+document.getElementById('btnImage').className='flex-1 bg-purple-500/50 text-white py-2 rounded-lg text-sm font-medium';
+document.getElementById('btnTemplate').className='flex-1 bg-green-500/50 text-white py-2 rounded-lg text-sm font-medium';
+if(type==='text'){
+document.getElementById('textForm').classList.remove('hidden');
+document.getElementById('btnText').className='flex-1 bg-blue-500 text-white py-2 rounded-lg text-sm font-medium';
+}else if(type==='image'){
+document.getElementById('imageForm').classList.remove('hidden');
+document.getElementById('btnImage').className='flex-1 bg-purple-500 text-white py-2 rounded-lg text-sm font-medium';
+}else if(type==='template'){
+document.getElementById('templateForm').classList.remove('hidden');
+document.getElementById('btnTemplate').className='flex-1 bg-green-500 text-white py-2 rounded-lg text-sm font-medium';
+}
+}
+
+// Send Text Message
+async function sendTextMessage(){
+if(!currentChatPhone){alert('⚠️ Önce bir sohbet seçin!');return;}
+const text=document.getElementById('textMessage').value;
+if(!text){alert('⚠️ Mesaj yazın!');return;}
+try{
+const res=await fetch('/api/send-text',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone_number:currentChatPhone,text})});
+const data=await res.json();
+if(data.success){
+document.getElementById('textMessage').value='';
+await selectChat(currentChatPhone);
+}else{
+alert(`❌ Hata!\n${data.error||'Mesaj gönderilemedi'}`);
+}
+}catch(err){
+alert(`❌ Bağlantı Hatası!\n${err.message}`);
+}
+}
+
+// Image Upload Handler
+let uploadedImageBase64=null;
+function handleImageUpload(event){
+const file=event.target.files[0];
+if(!file)return;
+if(!file.type.startsWith('image/')){
+alert('⚠️ Sadece resim dosyası yükleyebilirsiniz!');
+return;
+}
+const reader=new FileReader();
+reader.onload=(e)=>{
+uploadedImageBase64=e.target.result;
+document.getElementById('imagePreview').textContent=`✅ ${file.name} (${(file.size/1024).toFixed(1)} KB)`;
+document.getElementById('imageUrl').value='';
+document.getElementById('imageUrl').placeholder='Dosya seçildi - URL kullanılmayacak';
+};
+reader.readAsDataURL(file);
+}
+
+// Send Image Message
+async function sendImageMessage(){
+if(!currentChatPhone){alert('⚠️ Önce bir sohbet seçin!');return;}
+const imageUrl=document.getElementById('imageUrl').value;
+const caption=document.getElementById('imageCaptionText').value;
+if(!imageUrl && !uploadedImageBase64){
+alert('⚠️ Image URL girin veya dosya yükleyin!');
+return;
+}
+if(imageUrl && !imageUrl.startsWith('http')){
+alert('⚠️ Geçerli bir URL girin (https://...)');
+return;
+}
+try{
+const payload={phone_number:currentChatPhone};
+if(uploadedImageBase64){
+payload.image_base64=uploadedImageBase64;
+}else{
+payload.image_url=imageUrl;
+}
+if(caption){
+payload.caption=caption;
+}
+const res=await fetch('/api/send-image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+const data=await res.json();
+if(data.success){
+document.getElementById('imageUrl').value='';
+document.getElementById('imageCaptionText').value='';
+document.getElementById('imagePreview').textContent='';
+document.getElementById('imageUrl').placeholder='Image URL (https://...)';
+uploadedImageBase64=null;
+document.getElementById('imageFile').value='';
+await selectChat(currentChatPhone);
+}else{
+alert(`❌ Hata!\n${data.error||'Resim gönderilemedi'}`);
+}
+}catch(err){
+alert(`❌ Bağlantı Hatası!\n${err.message}`);
+}
+}
+
+// Upload Single Header Image
+async function uploadSingleHeaderImage(event){
+const file=event.target.files[0];
+if(!file)return;
+if(!file.type.startsWith('image/')){
+alert('⚠️ Sadece resim dosyası yükleyebilirsiniz!');
+return;
+}
+document.getElementById('singleHeaderImageStatus').textContent='⏳ Yükleniyor...';
+const reader=new FileReader();
+reader.onload=async(e)=>{
+try{
+const res=await fetch('/api/upload-template-media',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image_base64:e.target.result})});
+const data=await res.json();
+if(data.success){
+document.getElementById('singleHeaderImageId').value=data.media_id;
+document.getElementById('singleHeaderImageStatus').textContent=`✅ ${data.media_id}`;
+document.getElementById('singleHeaderImageStatus').className='text-xs text-green-400';
+}else{
+document.getElementById('singleHeaderImageStatus').textContent=`❌ ${data.error}`;
+document.getElementById('singleHeaderImageStatus').className='text-xs text-red-400';
+}
+}catch(err){
+document.getElementById('singleHeaderImageStatus').textContent=`❌ ${err.message}`;
+document.getElementById('singleHeaderImageStatus').className='text-xs text-red-400';
+}
+};
+reader.readAsDataURL(file);
+}
+
+// Send Template Message
+async function sendTemplateMessage(){
+if(!currentChatPhone){alert('⚠️ Önce bir sohbet seçin!');return;}
+const template=document.getElementById('singleTemplate').value;
+const headerImageId=document.getElementById('singleHeaderImageId').value;
+if(!template){alert('⚠️ Şablon adı girin!');return;}
+try{
+const payload={phone_number:currentChatPhone,template_name:template,language_code:'tr'};
+if(headerImageId){
+payload.header_image_id=headerImageId;
+}
+const res=await fetch('/api/send-single',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+const data=await res.json();
+if(data.success){
+document.getElementById('singleTemplate').value='';
+document.getElementById('singleHeaderImageId').value='';
+document.getElementById('singleHeaderImageStatus').textContent='';
+await selectChat(currentChatPhone);
+}else{
+alert(`❌ Hata!\n${data.error||'Mesaj gönderilemedi'}`);
+}
+}catch(err){
+alert(`❌ Bağlantı Hatası!\n${err.message}`);
+}
+}
+
+function loadAll(){
+loadStats();
+loadHistory();
+loadIncomingMessages();
+loadWebhookLogs();
+}
+
+loadContactsMap();
+loadAll();
+setInterval(loadAll,5000);
+
+// ESC tuşuyla modal'ları kapat
+document.addEventListener('keydown',(e)=>{
+if(e.key==='Escape'){
+if(!document.getElementById('previewModal').classList.contains('hidden'))closePreview();
+if(!document.getElementById('liveLogModal').classList.contains('hidden'))closeLiveLog();
+if(!document.getElementById('chatModal').classList.contains('hidden'))closeChat();
+}
+});
+</script>
+</body>
+</html>
