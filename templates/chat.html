@@ -319,10 +319,9 @@
                     <select x-model="selectedTemplate" required
                             class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
                         <option value="">Seçiniz...</option>
-                        <option value="sablon_1">Şablon 1</option>
-                        <option value="sablon_2">Şablon 2</option>
-                        <option value="sablon_3">Şablon 3</option>
-                        <option value="sablon_6">Şablon 6</option>
+                        <template x-for="template in templates" :key="template.id">
+                            <option :value="template.name" x-text="`${template.name} (${template.language})`"></option>
+                        </template>
                     </select>
                 </div>
 
@@ -376,6 +375,7 @@ function chat() {
         filteredChats: [],
         contacts: [],
         filteredContacts: [],
+        templates: [],
         searchQuery: '',
         contactSearchQuery: '',
         selectedPhone: null,
@@ -403,6 +403,7 @@ function chat() {
         init() {
             this.loadChats();
             this.loadContacts();
+            this.loadTemplates();
             this.loadStats();
             setInterval(() => this.refreshMessages(), 5000); // Auto refresh every 5s
         },
@@ -441,6 +442,23 @@ function chat() {
                 }
             } catch (error) {
                 console.error('Contacts yükleme hatası:', error);
+            }
+        },
+        
+        async loadTemplates() {
+            try {
+                const response = await fetch('/api/templates');
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Sadece APPROVED olan template'leri al
+                    this.templates = data.templates.filter(t => t.status === 'APPROVED');
+                    console.log(`✅ ${this.templates.length} template yüklendi (Meta API)`);
+                } else {
+                    console.error('Template yükleme hatası:', data.error);
+                }
+            } catch (error) {
+                console.error('Template yükleme hatası:', error);
             }
         },
         

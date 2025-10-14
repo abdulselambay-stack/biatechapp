@@ -6,6 +6,7 @@ from typing import Dict, List, Optional
 from pymongo.collection import Collection
 from bson.objectid import ObjectId
 from database import get_database
+import hashlib
 
 class ContactModel:
     """Kişi Yönetimi"""
@@ -468,3 +469,43 @@ class SalesModel:
             return result.deleted_count > 0
         except:
             return False
+
+class AdminModel:
+    """Admin Kullanıcı Yönetimi"""
+    
+    @staticmethod
+    def get_collection() -> Collection:
+        return get_database()['admins']
+    
+    @staticmethod
+    def hash_password(password: str) -> str:
+        """Şifreyi hashle"""
+        return hashlib.sha256(password.encode()).hexdigest()
+    
+    @staticmethod
+    def create_default_admin():
+        """Varsayılan admin kullanıcısı oluştur (uygulama başlangıcında)"""
+        admin_exists = AdminModel.get_collection().find_one({"username": "admin"})
+        
+        if not admin_exists:
+            admin = {
+                "username": "admin",
+                "password": AdminModel.hash_password("abdulselam"),
+                "created_at": datetime.utcnow(),
+                "is_active": True
+            }
+            AdminModel.get_collection().insert_one(admin)
+            print("✅ Default admin user created (username: admin)")
+        else:
+            print("ℹ️  Admin user already exists")
+    
+    @staticmethod
+    def verify_login(username: str, password: str) -> bool:
+        """Login doğrula"""
+        admin = AdminModel.get_collection().find_one({"username": username})
+        
+        if admin and admin.get("is_active"):
+            password_hash = AdminModel.hash_password(password)
+            return password_hash == admin["password"]
+        
+        return False

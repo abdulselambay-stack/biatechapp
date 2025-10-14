@@ -1,4 +1,5 @@
-from flask import Flask, request, jsonify, send_from_directory, render_template
+from flask import Flask, request, jsonify, send_from_directory, render_template, session, redirect, url_for
+from functools import wraps
 from dotenv import load_dotenv
 import os
 import json
@@ -11,7 +12,7 @@ from typing import List, Dict, Set
 
 # MongoDB imports
 from database import get_database
-from models import ContactModel, MessageModel, CampaignModel, WebhookLogModel, ChatModel, SalesModel
+from models import ContactModel, MessageModel, CampaignModel, WebhookLogModel, ChatModel, SalesModel, AdminModel
 
 # .env dosyasını manuel yükle
 def load_env_file():
@@ -27,6 +28,16 @@ def load_env_file():
 load_env_file()
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", "technoglobal-secret-key-2025")
+
+# ==================== LOGIN REQUIRED DECORATOR ====================
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'logged_in' not in session:
+            return redirect(url_for('login_page'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 # ==================== LOGGING ====================
 logging.basicConfig(
@@ -43,6 +54,13 @@ VERIFY_TOKEN = "technoglobal123"
 ACCESS_TOKEN = os.environ.get("WHATSAPP_ACCESS_TOKEN", "YOUR_ACCESS_TOKEN_HERE")
 PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID", "YOUR_PHONE_NUMBER_ID_HERE")
 WHATSAPP_API_URL = f"https://graph.facebook.com/v22.0/{PHONE_NUMBER_ID}/messages"
+WHATSAPP_BUSINESS_ID = os.environ.get("WHATSAPP_BUSINESS_ID", "1870559920510192")
+
+# ==================== INITIALIZE DEFAULT ADMIN ====================
+try:
+    AdminModel.create_default_admin()
+except Exception as e:
+    logger.warning(f"⚠️  Admin oluşturulamadı: {e}")
 
 # ==================== DOSYA YÖNETİMİ ====================
 CONTACTS_FILE = os.path.join(os.path.dirname(__file__), "contacts_with_index.json")
@@ -537,38 +555,77 @@ def receive_webhook():
     
     return "OK", 200
 
-# ==================== API ENDPOINTS ====================
+# ==================== AUTH ENDPOINTS ====================
+@app.route("/login")
+def login_page():
+    """Login sayfası"""
+    return render_template("login.html")
+
+@app.route("/api/login", methods=["POST"])
+def api_login():
+    """Login API"""
+    try:
+        data = request.get_json()
+        username = data.get("username")
+        password = data.get("password")
+        
+        if AdminModel.verify_login(username, password):
+            session['logged_in'] = True
+            session['username'] = username
+            logger.info(f"✅ Login successful: {username}")
+            return jsonify({"success": True})
+        else:
+            logger.warning(f"❌ Login failed: {username}")
+            return jsonify({"success": False, "error": "Kullanıcı adı veya şifre hatalı"}), 401
+    except Exception as e:
+        logger.error(f"Login error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/logout", methods=["POST"])
+def api_logout():
+    """Logout API"""
+    session.clear()
+    return jsonify({"success": True})
+
+# ==================== PAGE ROUTES (Protected) ====================
 @app.route("/")
+@login_required
 def index():
     """Ana sayfa - Modern dashboard"""
     return render_template("dashboard_modern.html")
 
 @app.route("/contacts")
+@login_required
 def contacts_page():
     """Kişiler sayfası"""
     return render_template("contacts.html")
 
 @app.route("/campaigns")
+@login_required
 def campaigns_page():
     """Kampanyalar sayfası"""
     return render_template("campaigns.html")
 
 @app.route("/analytics")
+@login_required
 def analytics_page():
     """Analitik sayfası"""
     return render_template("analytics.html")
 
 @app.route("/settings")
+@login_required
 def settings_page():
     """Ayarlar sayfası"""
     return render_template("settings.html")
 
 @app.route("/chat")
+@login_required
 def chat_page():
     """Chat sayfası"""
     return render_template("chat.html")
 
 @app.route("/sales")
+@login_required
 def sales_page():
     """Satışlar sayfası"""
     return render_template("sales.html")
@@ -1717,6 +1774,56 @@ def api_delete_sale(sale_id):
         })
     except Exception as e:
         logger.error(f"Delete sale error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# ==================== TEMPLATE API ====================
+
+@app.route("/api/templates", methods=["GET"])
+@login_required
+def api_get_templates():
+    """Meta API'den template'leri çek"""
+    try:
+        url = f"https://graph.facebook.com/v24.0/{WHATSAPP_BUSINESS_ID}/message_templates"
+        headers = {
+            "Authorization": f"Bearer {ACCESS_TOKEN}"
+        }
+        
+        logger.info(f"📋 Fetching templates from Meta API...")
+        response = requests.get(url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            templates = data.get("data", [])
+            
+            # Template'leri formatla
+            formatted_templates = []
+            for template in templates:
+                formatted_templates.append({
+                    "id": template.get("id"),
+                    "name": template.get("name"),
+                    "language": template.get("language"),
+                    "status": template.get("status"),
+                    "category": template.get("category"),
+                    "components": template.get("components", [])
+                })
+            
+            logger.info(f"✅ {len(formatted_templates)} template loaded from Meta")
+            
+            return jsonify({
+                "success": True,
+                "templates": formatted_templates,
+                "count": len(formatted_templates)
+            })
+        else:
+            error_data = response.json()
+            logger.error(f"❌ Meta API error: {error_data}")
+            return jsonify({
+                "success": False,
+                "error": error_data.get("error", {}).get("message", "Template'ler alınamadı")
+            }), response.status_code
+            
+    except Exception as e:
+        logger.error(f"Template fetch error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 # Only run Flask dev server when executed directly (not with gunicorn)
