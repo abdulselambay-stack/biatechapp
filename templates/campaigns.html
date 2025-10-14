@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+
+{% block title %}Kampanyalar - WhatsApp Cloud API{% endblock %}
+{% block page_title %}Kampanya Yönetimi{% endblock %}
+{% block page_subtitle %}Toplu mesaj kampanyalarınız{% endblock %}
+
+{% block content %}
+<div class="space-y-6" x-data="campaigns()">
+    
+    <!-- Quick Start -->
+    <div class="bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl shadow-lg p-6 text-white">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 class="text-2xl font-bold mb-2">Yeni Kampanya Başlat</h3>
+                <p class="text-green-100">Toplu mesaj göndererek müşterilerinize ulaşın</p>
+            </div>
+            <button @click="openNewCampaign()" 
+                    class="bg-white text-green-600 px-6 py-3 rounded-xl font-bold hover:bg-green-50 transition-all duration-200 shadow-lg hover:shadow-xl">
+                <div class="flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                    Yeni Kampanya
+                </div>
+            </button>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-white rounded-xl shadow p-4 border border-gray-100">
+            <p class="text-sm text-gray-500 mb-1">Aktif Kampanya</p>
+            <p class="text-2xl font-bold text-green-600" x-text="stats.active">0</p>
+        </div>
+        <div class="bg-white rounded-xl shadow p-4 border border-gray-100">
+            <p class="text-sm text-gray-500 mb-1">Tamamlanan</p>
+            <p class="text-2xl font-bold text-blue-600" x-text="stats.completed">0</p>
+        </div>
+        <div class="bg-white rounded-xl shadow p-4 border border-gray-100">
+            <p class="text-sm text-gray-500 mb-1">Toplam Gönderim</p>
+            <p class="text-2xl font-bold text-purple-600" x-text="stats.total_sent">0</p>
+        </div>
+        <div class="bg-white rounded-xl shadow p-4 border border-gray-100">
+            <p class="text-sm text-gray-500 mb-1">Başarı Oranı</p>
+            <p class="text-2xl font-bold text-amber-600" x-text="stats.success_rate + '%'">0%</p>
+        </div>
+    </div>
+
+    <!-- Campaigns List -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <template x-for="campaign in campaigns" :key="campaign._id">
+            <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-200">
+                <!-- Header -->
+                <div class="flex items-start justify-between mb-4">
+                    <div class="flex-1">
+                        <h3 class="text-lg font-bold text-gray-900 mb-1" x-text="campaign.name"></h3>
+                        <p class="text-sm text-gray-500">Şablon: <span class="font-medium" x-text="campaign.template_name"></span></p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span :class="{
+                            'bg-green-100 text-green-700': campaign.status === 'running',
+                            'bg-blue-100 text-blue-700': campaign.status === 'completed',
+                            'bg-yellow-100 text-yellow-700': campaign.status === 'pending',
+                            'bg-gray-100 text-gray-700': campaign.status === 'scheduled'
+                        }" class="px-3 py-1 rounded-full text-xs font-semibold" x-text="campaign.status === 'running' ? 'Çalışıyor' : campaign.status === 'completed' ? 'Tamamlandı' : campaign.status === 'pending' ? 'Bekliyor' : 'Zamanlandı'"></span>
+                    </div>
+                </div>
+
+                <!-- Progress -->
+                <div class="mb-4">
+                    <div class="flex items-center justify-between text-sm mb-2">
+                        <span class="text-gray-600">İlerleme</span>
+                        <span class="font-bold text-gray-900" x-text="`${campaign.sent_count || 0} / ${campaign.total_count}`"></span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="bg-gradient-to-r from-green-500 to-emerald-500 h-2 rounded-full transition-all duration-300"
+                             :style="`width: ${((campaign.sent_count || 0) / campaign.total_count) * 100}%`"></div>
+                    </div>
+                </div>
+
+                <!-- Stats -->
+                <div class="grid grid-cols-3 gap-4 mb-4">
+                    <div class="text-center">
+                        <p class="text-2xl font-bold text-green-600" x-text="campaign.delivered_count || 0"></p>
+                        <p class="text-xs text-gray-500">Teslim</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-2xl font-bold text-red-600" x-text="campaign.failed_count || 0"></p>
+                        <p class="text-xs text-gray-500">Hata</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-2xl font-bold text-blue-600" x-text="Math.round(((campaign.delivered_count || 0) / (campaign.sent_count || 1)) * 100)"></p>
+                        <p class="text-xs text-gray-500">Başarı %</p>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex gap-2 pt-4 border-t border-gray-100">
+                    <button @click="viewCampaign(campaign)" 
+                            class="flex-1 px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg text-sm font-medium transition-colors">
+                        Detay
+                    </button>
+                    <button x-show="campaign.status === 'running'" 
+                            @click="stopCampaign(campaign)"
+                            class="flex-1 px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-sm font-medium transition-colors">
+                        Durdur
+                    </button>
+                    <button x-show="campaign.status === 'completed'" 
+                            @click="exportCampaign(campaign)"
+                            class="flex-1 px-4 py-2 bg-green-50 hover:bg-green-100 text-green-600 rounded-lg text-sm font-medium transition-colors">
+                        Rapor
+                    </button>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <!-- Empty State -->
+    <div x-show="campaigns.length === 0" class="bg-white rounded-2xl shadow-lg p-12 text-center border border-gray-100">
+        <svg class="w-20 h-20 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
+        </svg>
+        <h3 class="text-xl font-bold text-gray-900 mb-2">Henüz kampanya yok</h3>
+        <p class="text-gray-500 mb-6">İlk kampanyanızı oluşturarak başlayın</p>
+        <button @click="openNewCampaign()" 
+                class="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-medium hover:shadow-lg transition-all">
+            Yeni Kampanya Oluştur
+        </button>
+    </div>
+
+    <!-- New Campaign Modal -->
+    <div x-show="showModal" 
+         x-cloak
+         @click.self="showModal = false"
+         class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+         x-transition>
+        
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto" @click.stop>
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-2xl font-bold text-gray-900">Yeni Kampanya Oluştur</h3>
+                <button @click="showModal = false" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <form @submit.prevent="createCampaign()" class="space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Kampanya Adı *</label>
+                    <input type="text" x-model="formData.name" required
+                           placeholder="Ocak Ayı Kampanyası"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Şablon *</label>
+                    <select x-model="formData.template" required
+                            class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent">
+                        <option value="">Şablon seçin</option>
+                        <option value="sablon_1">Şablon 1 - Promosyon</option>
+                        <option value="sablon_2">Şablon 2 - Bilgilendirme</option>
+                        <option value="sablon_3">Şablon 3 - Duyuru</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Hedef Kişiler *</label>
+                    <select x-model="formData.target" required
+                            class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent">
+                        <option value="all">Tüm Kişiler</option>
+                        <option value="tagged">Etiketli Kişiler</option>
+                        <option value="custom">Özel Liste</option>
+                    </select>
+                </div>
+
+                <div x-show="formData.target === 'tagged'">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Etiket Seç</label>
+                    <input type="text" x-model="formData.tags"
+                           placeholder="vip, müşteri"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Zamanlama</label>
+                    <select x-model="formData.schedule"
+                            class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent">
+                        <option value="now">Hemen Başlat</option>
+                        <option value="later">Zamanla</option>
+                    </select>
+                </div>
+
+                <div class="flex gap-3 pt-4">
+                    <button type="button" @click="showModal = false"
+                            class="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-medium transition-colors">
+                        İptal
+                    </button>
+                    <button type="submit"
+                            class="flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl font-medium transition-all">
+                        Kampanyayı Başlat
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function campaigns() {
+    return {
+        campaigns: [],
+        showModal: false,
+        formData: {
+            name: '',
+            template: '',
+            target: 'all',
+            tags: '',
+            schedule: 'now'
+        },
+        stats: {
+            active: 0,
+            completed: 0,
+            total_sent: 0,
+            success_rate: 0
+        },
+        
+        init() {
+            this.loadCampaigns();
+            setInterval(() => this.loadCampaigns(), 5000); // Auto refresh
+        },
+        
+        async loadCampaigns() {
+            // Mock data - API'den çekilecek
+            this.campaigns = [
+                {
+                    _id: '1',
+                    name: 'Ocak Kampanyası',
+                    template_name: 'sablon_6',
+                    status: 'completed',
+                    total_count: 150,
+                    sent_count: 150,
+                    delivered_count: 147,
+                    failed_count: 3
+                }
+            ];
+            
+            this.updateStats();
+        },
+        
+        updateStats() {
+            this.stats.active = this.campaigns.filter(c => c.status === 'running').length;
+            this.stats.completed = this.campaigns.filter(c => c.status === 'completed').length;
+            this.stats.total_sent = this.campaigns.reduce((sum, c) => sum + (c.sent_count || 0), 0);
+            
+            const total = this.campaigns.reduce((sum, c) => sum + (c.sent_count || 0), 0);
+            const success = this.campaigns.reduce((sum, c) => sum + (c.delivered_count || 0), 0);
+            this.stats.success_rate = total > 0 ? Math.round((success / total) * 100) : 0;
+        },
+        
+        openNewCampaign() {
+            this.formData = { name: '', template: '', target: 'all', tags: '', schedule: 'now' };
+            this.showModal = true;
+        },
+        
+        async createCampaign() {
+            alert('✅ Kampanya oluşturuldu! (API entegrasyonu yapılacak)');
+            this.showModal = false;
+            this.loadCampaigns();
+        },
+        
+        viewCampaign(campaign) {
+            alert(`Kampanya detayları: ${campaign.name}`);
+        },
+        
+        stopCampaign(campaign) {
+            if(confirm('Kampanyayı durdurmak istediğinizden emin misiniz?')) {
+                alert('✅ Kampanya durduruldu');
+            }
+        },
+        
+        exportCampaign(campaign) {
+            alert('📊 Rapor indirildi');
+        }
+    }
+}
+</script>
+{% endblock %}

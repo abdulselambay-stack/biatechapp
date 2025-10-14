@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block title %}Ayarlar - WhatsApp Cloud API{% endblock %}
+{% block page_title %}Ayarlar{% endblock %}
+{% block page_subtitle %}Sistem yapılandırması ve tercihler{% endblock %}
+
+{% block content %}
+<div class="space-y-6" x-data="settings()">
+    
+    <!-- Settings Tabs -->
+    <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+        <div class="border-b border-gray-200">
+            <div class="flex overflow-x-auto scrollbar-hide">
+                <button @click="activeTab = 'general'" 
+                        :class="activeTab === 'general' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                        class="px-6 py-4 border-b-2 font-medium text-sm whitespace-nowrap transition-colors">
+                    Genel
+                </button>
+                <button @click="activeTab = 'whatsapp'" 
+                        :class="activeTab === 'whatsapp' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                        class="px-6 py-4 border-b-2 font-medium text-sm whitespace-nowrap transition-colors">
+                    WhatsApp API
+                </button>
+                <button @click="activeTab = 'database'" 
+                        :class="activeTab === 'database' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                        class="px-6 py-4 border-b-2 font-medium text-sm whitespace-nowrap transition-colors">
+                    Veritabanı
+                </button>
+                <button @click="activeTab = 'notifications'" 
+                        :class="activeTab === 'notifications' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                        class="px-6 py-4 border-b-2 font-medium text-sm whitespace-nowrap transition-colors">
+                    Bildirimler
+                </button>
+            </div>
+        </div>
+
+        <!-- General Settings -->
+        <div x-show="activeTab === 'general'" class="p-6 space-y-6">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Uygulama Adı</label>
+                <input type="text" value="WhatsApp Cloud API"
+                       class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Webhook URL</label>
+                <div class="flex gap-2">
+                    <input type="url" value="https://biatechapp-production.up.railway.app/webhook" readonly
+                           class="flex-1 px-4 py-3 border border-gray-300 rounded-xl bg-gray-50">
+                    <button class="px-4 py-3 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-xl transition-colors">
+                        Kopyala
+                    </button>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Verify Token</label>
+                <input type="text" value="technoglobal123" readonly
+                       class="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50">
+            </div>
+
+            <div class="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                <div>
+                    <p class="font-medium text-gray-900">Otomatik Yedekleme</p>
+                    <p class="text-sm text-gray-500">Günlük veritabanı yedeği</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" class="sr-only peer" checked>
+                    <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                </label>
+            </div>
+        </div>
+
+        <!-- WhatsApp API Settings -->
+        <div x-show="activeTab === 'whatsapp'" class="p-6 space-y-6">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Access Token</label>
+                <div class="flex gap-2">
+                    <input type="password" value="EAAQiYHZApb4IBPlGPQPri..." readonly
+                           class="flex-1 px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 font-mono text-sm">
+                    <button class="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors">
+                        Göster
+                    </button>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Phone Number ID</label>
+                <input type="text" value="789162337618655" readonly
+                       class="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 font-mono">
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div class="p-4 bg-green-50 rounded-xl">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                        <p class="text-sm font-medium text-gray-700">WhatsApp API</p>
+                    </div>
+                    <p class="text-lg font-bold text-green-600">Aktif</p>
+                </div>
+
+                <div class="p-4 bg-blue-50 rounded-xl">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                        <p class="text-sm font-medium text-gray-700">Webhook</p>
+                    </div>
+                    <p class="text-lg font-bold text-blue-600">Dinliyor</p>
+                </div>
+            </div>
+
+            <button class="w-full px-4 py-3 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-xl font-medium transition-colors">
+                Bağlantıyı Test Et
+            </button>
+        </div>
+
+        <!-- Database Settings -->
+        <div x-show="activeTab === 'database'" class="p-6 space-y-6">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">MongoDB URI</label>
+                <input type="password" value="mongodb+srv://user:****@toptanci..." readonly
+                       class="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 font-mono text-sm">
+            </div>
+
+            <div class="grid grid-cols-3 gap-4">
+                <div class="p-4 bg-white border border-gray-200 rounded-xl">
+                    <p class="text-sm text-gray-500 mb-1">Kişiler</p>
+                    <p class="text-2xl font-bold text-gray-900">9,249</p>
+                </div>
+                <div class="p-4 bg-white border border-gray-200 rounded-xl">
+                    <p class="text-sm text-gray-500 mb-1">Mesajlar</p>
+                    <p class="text-2xl font-bold text-gray-900">150</p>
+                </div>
+                <div class="p-4 bg-white border border-gray-200 rounded-xl">
+                    <p class="text-sm text-gray-500 mb-1">Loglar</p>
+                    <p class="text-2xl font-bold text-gray-900">412</p>
+                </div>
+            </div>
+
+            <div class="flex gap-3">
+                <button class="flex-1 px-4 py-3 bg-green-50 hover:bg-green-100 text-green-600 rounded-xl font-medium transition-colors">
+                    Veritabanını Yedekle
+                </button>
+                <button class="flex-1 px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-medium transition-colors">
+                    Tüm Verileri Temizle
+                </button>
+            </div>
+        </div>
+
+        <!-- Notifications Settings -->
+        <div x-show="activeTab === 'notifications'" class="p-6 space-y-4">
+            <div class="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                <div>
+                    <p class="font-medium text-gray-900">Email Bildirimleri</p>
+                    <p class="text-sm text-gray-500">Önemli olaylar için</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" class="sr-only peer" checked>
+                    <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                </label>
+            </div>
+
+            <div class="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                <div>
+                    <p class="font-medium text-gray-900">Kampanya Tamamlandı</p>
+                    <p class="text-sm text-gray-500">Bildirim gönder</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" class="sr-only peer" checked>
+                    <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                </label>
+            </div>
+
+            <div class="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                <div>
+                    <p class="font-medium text-gray-900">Hata Bildirimleri</p>
+                    <p class="text-sm text-gray-500">Anında uyarı</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" class="sr-only peer" checked>
+                    <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Info -->
+    <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+        <h3 class="text-lg font-bold text-gray-900 mb-4">Sistem Bilgisi</h3>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+                <p class="text-sm text-gray-500">Versiyon</p>
+                <p class="font-medium text-gray-900">v2.0.0</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500">Çalışma Süresi</p>
+                <p class="font-medium text-gray-900">12 saat 34 dk</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500">Son Güncelleme</p>
+                <p class="font-medium text-gray-900">14 Eki 2025</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500">Durum</p>
+                <p class="font-medium text-green-600">✓ Sağlıklı</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function settings() {
+    return {
+        activeTab: 'general'
+    }
+}
+</script>
+{% endblock %}

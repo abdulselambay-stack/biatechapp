@@ -401,14 +401,8 @@ def verify_webhook():
 
 @app.route("/webhook", methods=["POST"])
 def receive_webhook():
-    """Gelen webhook'ları yakala ve kaydet"""
+    """Gelen webhook'ları yakala ve MongoDB'ye kaydet"""
     data = request.get_json()
-    timestamp = datetime.datetime.now().isoformat()
-    
-    log_entry = {
-        "timestamp": timestamp,
-        "data": data
-    }
     
     try:
         value = data["entry"][0]["changes"][0]["value"]
@@ -416,42 +410,110 @@ def receive_webhook():
         # Mesaj durumu (delivered, read, sent, failed)
         if "statuses" in value:
             status = value["statuses"][0]
-            log_entry["type"] = "status"
-            log_entry["status"] = status["status"]
-            log_entry["message_id"] = status["id"]
-            log_entry["recipient"] = status.get("recipient_id", "unknown")
+            message_id = status["id"]
+            status_type = status["status"]
+            recipient = status.get("recipient_id", "unknown")
             
-            logger.info(f"📦 Mesaj durumu: {status['status']} → {status['id']}")
+            logger.info(f"📦 Mesaj durumu: {status_type} → {message_id} (Alıcı: {recipient})")
+            
+            # MongoDB'ye webhook log kaydet
+            WebhookLogModel.create_log(
+                event_type="status",
+                phone=recipient,
+                data={"status": status_type, "message_id": message_id, "full_data": status}
+            )
+            
+            # MessageModel'i güncelle
+            if status_type in ["sent", "delivered", "read", "failed"]:
+                error_msg = None
+                if status_type == "failed" and "errors" in status:
+                    error_msg = str(status["errors"])
+                
+                MessageModel.update_status(
+                    message_id=message_id,
+                    status=status_type,
+                    error=error_msg
+                )
+                logger.info(f"   ✅ Message status updated in MongoDB: {message_id} → {status_type}")
         
         # Gelen mesaj
         elif "messages" in value:
             msg = value["messages"][0]
-            log_entry["type"] = "incoming_message"
-            log_entry["from"] = msg["from"]
-            log_entry["message_type"] = msg["type"]
+            phone = msg["from"]
+            message_type = msg["type"]
+            message_id = msg["id"]
             
-            if msg["type"] == "text":
-                log_entry["text"] = msg["text"]["body"]
-            elif msg["type"] == "image":
-                log_entry["text"] = msg.get("image", {}).get("caption", "(Resim)")
-                log_entry["media_url"] = msg.get("image", {}).get("link")
-            elif msg["type"] == "video":
-                log_entry["text"] = msg.get("video", {}).get("caption", "(Video)")
-                log_entry["media_url"] = msg.get("video", {}).get("link")
-            elif msg["type"] == "document":
-                log_entry["text"] = msg.get("document", {}).get("caption", "(Dosya)")
-                log_entry["media_url"] = msg.get("document", {}).get("link")
+            # Mesaj içeriğini al
+            content = ""
+            media_url = None
+            
+            if message_type == "text":
+                content = msg["text"]["body"]
+            elif message_type == "image":
+                content = msg.get("image", {}).get("caption", "(Resim)")
+                media_url = msg.get("image", {}).get("link")
+            elif message_type == "video":
+                content = msg.get("video", {}).get("caption", "(Video)")
+                media_url = msg.get("video", {}).get("link")
+            elif message_type == "document":
+                content = msg.get("document", {}).get("caption", "(Dosya)")
+                media_url = msg.get("document", {}).get("link")
             else:
-                log_entry["text"] = f"({msg['type']})"
+                content = f"({message_type})"
             
-            logger.info(f"💬 Gelen mesaj: {msg['from']} - {msg['type']}")
+            logger.info(f"💬 Gelen mesaj: {phone} - {message_type}: {content[:50]}")
+            
+            # MongoDB'ye webhook log kaydet
+            WebhookLogModel.create_log(
+                event_type="incoming_message",
+                phone=phone,
+                data={"message_type": message_type, "content": content, "message_id": message_id}
+            )
+            
+            # Chat history'e kaydet
+            ChatModel.save_message(
+                phone=phone,
+                direction="incoming",
+                message_type=message_type,
+                content=content,
+                media_url=media_url
+            )
+            logger.info(f"   ✅ Message saved to chat history: {phone}")
+            
+            # Contact yoksa otomatik ekle
+            existing_contact = ContactModel.get_contact(phone)
+            if not existing_contact:
+                # Profile bilgilerini al (varsa)
+                profile_name = value.get("contacts", [{}])[0].get("profile", {}).get("name", phone)
+                
+                ContactModel.create_contact(
+                    phone=phone,
+                    name=profile_name,
+                    country="",
+                    tags=["webhook"]  # Otomatik eklenen
+                )
+                logger.info(f"   ✅ New contact auto-added from webhook: {phone} ({profile_name})")
         
-        save_webhook_log(log_entry)
+        # JSON dosyasına da yedek kaydet (backward compatibility)
+        save_webhook_log({
+            "timestamp": datetime.datetime.now().isoformat(),
+            "data": data,
+            "type": "status" if "statuses" in value else "incoming_message"
+        })
         
     except Exception as e:
         logger.error(f"⚠️ Webhook parsing hatası: {e}")
-        log_entry["error"] = str(e)
-        save_webhook_log(log_entry)
+        logger.error(f"   Data: {data}")
+        
+        # Hata durumunda da MongoDB'ye kaydet
+        try:
+            WebhookLogModel.create_log(
+                event_type="error",
+                phone=None,
+                data={"error": str(e), "raw_data": data}
+            )
+        except:
+            pass
     
     return "OK", 200
 
@@ -480,6 +542,11 @@ def analytics_page():
 def settings_page():
     """Ayarlar sayfası"""
     return render_template("settings.html")
+
+@app.route("/chat")
+def chat_page():
+    """Chat sayfası"""
+    return render_template("chat.html")
 
 @app.route("/uploads/<filename>")
 def serve_upload(filename):
@@ -1409,6 +1476,97 @@ def api_delete_contact(phone):
         })
     except Exception as e:
         logger.error(f"Delete contact error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# ==================== CHAT API ENDPOINTS ====================
+
+@app.route("/api/chats", methods=["GET"])
+def api_get_chats():
+    """Tüm chat'leri getir (MongoDB)"""
+    try:
+        chats = ChatModel.get_all_chats()
+        
+        # Her chat için contact bilgisini ekle
+        for chat in chats:
+            contact = ContactModel.get_contact(chat['phone'])
+            if contact:
+                chat['name'] = contact['name']
+            else:
+                chat['name'] = chat['phone']
+            chat['unread'] = 0  # TODO: Implement unread count
+        
+        return jsonify({
+            "success": True,
+            "chats": chats
+        })
+    except Exception as e:
+        logger.error(f"Get chats error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/chat/<phone>", methods=["GET"])
+def api_get_chat_history(phone):
+    """Bir kişiyle olan chat geçmişini getir (MongoDB)"""
+    try:
+        limit = int(request.args.get("limit", 100))
+        messages = ChatModel.get_chat_history(phone, limit=limit)
+        
+        return jsonify({
+            "success": True,
+            "messages": messages
+        })
+    except Exception as e:
+        logger.error(f"Get chat history error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/chat/send", methods=["POST"])
+def api_send_chat_message():
+    """Chat'ten mesaj gönder (MongoDB'ye kaydet)"""
+    try:
+        data = request.get_json()
+        phone = data.get("phone")
+        message = data.get("message")
+        
+        if not phone or not message:
+            return jsonify({"success": False, "error": "Phone ve message gerekli"}), 400
+        
+        # WhatsApp API'ye mesaj gönder
+        result = send_text_message(phone, message)
+        
+        if result.get("success"):
+            # MongoDB'ye kaydet
+            ChatModel.save_message(
+                phone=phone,
+                direction="outgoing",
+                message_type="text",
+                content=message
+            )
+            
+            # MessageModel'e de kaydet
+            message_id = result.get("response", {}).get("messages", [{}])[0].get("id")
+            if message_id:
+                MessageModel.create_message(
+                    phone=phone,
+                    template_name="manual_chat",
+                    message_type="text",
+                    content=message,
+                    status="sent"
+                )
+                MessageModel.set_message_id(phone, "manual_chat", message_id)
+            
+            logger.info(f"✅ Chat message sent and saved: {phone}")
+            
+            return jsonify({
+                "success": True,
+                "message": "Mesaj gönderildi"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": result.get("error", "Mesaj gönderilemedi")
+            }), 400
+            
+    except Exception as e:
+        logger.error(f"Send chat message error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 # Only run Flask dev server when executed directly (not with gunicorn)

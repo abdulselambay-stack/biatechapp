@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+
+{% block title %}Chat - WhatsApp Cloud API{% endblock %}
+{% block page_title %}WhatsApp Chat{% endblock %}
+{% block page_subtitle %}Tüm konuşmalarınız{% endblock %}
+
+{% block content %}
+<div class="h-[calc(100vh-12rem)]" x-data="chat()">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
+        
+        <!-- Chat List -->
+        <div class="lg:col-span-1 bg-white rounded-2xl shadow-lg border border-gray-100 flex flex-col overflow-hidden">
+            <!-- Search -->
+            <div class="p-4 border-b border-gray-200">
+                <div class="relative">
+                    <input type="text" 
+                           x-model="searchQuery"
+                           @input="filterChats()"
+                           placeholder="Kişi ara..."
+                           class="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent">
+                    <svg class="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Chats -->
+            <div class="flex-1 overflow-y-auto">
+                <template x-for="chatItem in filteredChats" :key="chatItem.phone">
+                    <button @click="selectChat(chatItem)" 
+                            :class="selectedPhone === chatItem.phone ? 'bg-green-50 border-l-4 border-green-500' : 'hover:bg-gray-50'"
+                            class="w-full p-4 border-b border-gray-100 flex items-start gap-3 text-left transition-colors">
+                        <div class="w-12 h-12 rounded-full bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center text-white font-bold flex-shrink-0">
+                            <span x-text="chatItem.name?.charAt(0).toUpperCase() || 'U'"></span>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center justify-between mb-1">
+                                <p class="font-semibold text-gray-900 truncate" x-text="chatItem.name || chatItem.phone"></p>
+                                <span class="text-xs text-gray-500" x-text="formatTime(chatItem.last_message_time)"></span>
+                            </div>
+                            <p class="text-sm text-gray-600 truncate" x-text="chatItem.last_message"></p>
+                        </div>
+                        <div x-show="chatItem.unread > 0" class="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full" x-text="chatItem.unread"></div>
+                    </button>
+                </template>
+                
+                <!-- Empty State -->
+                <div x-show="filteredChats.length === 0" class="p-8 text-center">
+                    <svg class="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                    </svg>
+                    <p class="text-gray-500">Henüz mesaj yok</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Window -->
+        <div class="lg:col-span-2 bg-white rounded-2xl shadow-lg border border-gray-100 flex flex-col overflow-hidden">
+            
+            <template x-if="selectedPhone">
+                <div class="flex flex-col h-full">
+                    <!-- Chat Header -->
+                    <div class="p-4 border-b border-gray-200 bg-gray-50">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center text-white font-bold">
+                                    <span x-text="selectedChat?.name?.charAt(0).toUpperCase() || 'U'"></span>
+                                </div>
+                                <div>
+                                    <p class="font-semibold text-gray-900" x-text="selectedChat?.name || selectedPhone"></p>
+                                    <p class="text-sm text-gray-500" x-text="selectedPhone"></p>
+                                </div>
+                            </div>
+                            <button class="p-2 hover:bg-gray-200 rounded-lg transition-colors">
+                                <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Messages -->
+                    <div class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50" x-ref="messagesContainer">
+                        <template x-for="(message, index) in messages" :key="index">
+                            <div :class="message.direction === 'outgoing' ? 'flex justify-end' : 'flex justify-start'">
+                                <div :class="message.direction === 'outgoing' ? 'bg-green-500 text-white' : 'bg-white border border-gray-200 text-gray-900'"
+                                     class="max-w-[70%] rounded-2xl px-4 py-2 shadow">
+                                    
+                                    <!-- Image -->
+                                    <template x-if="message.message_type === 'image' && message.media_url">
+                                        <img :src="message.media_url" class="rounded-lg mb-2 max-w-full">
+                                    </template>
+                                    
+                                    <!-- Text -->
+                                    <p class="text-sm break-words" x-text="message.content"></p>
+                                    
+                                    <!-- Time -->
+                                    <p :class="message.direction === 'outgoing' ? 'text-green-100' : 'text-gray-400'"
+                                       class="text-xs mt-1" x-text="formatTime(message.timestamp)"></p>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Message Input -->
+                    <div class="p-4 border-t border-gray-200 bg-white">
+                        <form @submit.prevent="sendMessage()" class="flex items-end gap-2">
+                            <button type="button" class="p-3 hover:bg-gray-100 rounded-lg transition-colors">
+                                <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
+                                </svg>
+                            </button>
+                            <textarea x-model="newMessage"
+                                      @keydown.enter.prevent="sendMessage()"
+                                      placeholder="Mesajınızı yazın..."
+                                      rows="1"
+                                      class="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"></textarea>
+                            <button type="submit" 
+                                    :disabled="!newMessage.trim()"
+                                    :class="newMessage.trim() ? 'bg-green-500 hover:bg-green-600' : 'bg-gray-300 cursor-not-allowed'"
+                                    class="p-3 text-white rounded-xl transition-colors">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                                </svg>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </template>
+
+            <!-- No Chat Selected -->
+            <template x-if="!selectedPhone">
+                <div class="flex items-center justify-center h-full text-center p-8">
+                    <div>
+                        <svg class="w-24 h-24 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                        </svg>
+                        <h3 class="text-xl font-bold text-gray-900 mb-2">Bir sohbet seçin</h3>
+                        <p class="text-gray-500">Mesajlaşmaya başlamak için soldaki listeden bir kişi seçin</p>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function chat() {
+    return {
+        chats: [],
+        filteredChats: [],
+        searchQuery: '',
+        selectedPhone: null,
+        selectedChat: null,
+        messages: [],
+        newMessage: '',
+        
+        init() {
+            this.loadChats();
+            setInterval(() => this.refreshMessages(), 5000); // Auto refresh every 5s
+        },
+        
+        async loadChats() {
+            try {
+                const response = await fetch('/api/chats');
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.chats = data.chats;
+                    this.filterChats();
+                }
+            } catch (error) {
+                console.error('Chat yükleme hatası:', error);
+                this.chats = [];
+            }
+        },
+        
+        filterChats() {
+            const query = this.searchQuery.toLowerCase();
+            this.filteredChats = this.chats.filter(c => 
+                c.name?.toLowerCase().includes(query) || 
+                c.phone.includes(query)
+            );
+        },
+        
+        async selectChat(chatItem) {
+            this.selectedPhone = chatItem.phone;
+            this.selectedChat = chatItem;
+            await this.loadMessages();
+            this.scrollToBottom();
+        },
+        
+        async loadMessages() {
+            try {
+                const response = await fetch(`/api/chat/${this.selectedPhone}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.messages = data.messages;
+                }
+            } catch (error) {
+                console.error('Mesaj yükleme hatası:', error);
+                this.messages = [];
+            }
+        },
+        
+        async refreshMessages() {
+            if (this.selectedPhone) {
+                await this.loadMessages();
+            }
+        },
+        
+        async sendMessage() {
+            if (!this.newMessage.trim()) return;
+            
+            const messageText = this.newMessage;
+            this.newMessage = ''; // Hemen temizle
+            
+            try {
+                const response = await fetch('/api/chat/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        phone: this.selectedPhone,
+                        message: messageText
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Mesajı hemen ekle (optimistic update)
+                    this.messages.push({
+                        direction: 'outgoing',
+                        message_type: 'text',
+                        content: messageText,
+                        timestamp: new Date().toISOString()
+                    });
+                    
+                    this.$nextTick(() => this.scrollToBottom());
+                    
+                    // Chat listesini güncelle
+                    this.loadChats();
+                } else {
+                    alert('❌ Mesaj gönderilemedi: ' + data.error);
+                    this.newMessage = messageText; // Geri koy
+                }
+            } catch (error) {
+                alert('❌ Bağlantı hatası: ' + error.message);
+                this.newMessage = messageText; // Geri koy
+            }
+        },
+        
+        scrollToBottom() {
+            this.$nextTick(() => {
+                const container = this.$refs.messagesContainer;
+                if (container) {
+                    container.scrollTop = container.scrollHeight;
+                }
+            });
+        },
+        
+        formatTime(timestamp) {
+            if (!timestamp) return '';
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diff = now - date;
+            
+            if (diff < 60000) return 'Şimdi';
+            if (diff < 3600000) return `${Math.floor(diff / 60000)} dk önce`;
+            if (diff < 86400000) return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+            return date.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' });
+        }
+    }
+}
+</script>
+{% endblock %}

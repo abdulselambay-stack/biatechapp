@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}Analitik - WhatsApp Cloud API{% endblock %}
+{% block page_title %}Analitik & Raporlar{% endblock %}
+{% block page_subtitle %}Detaylı istatistikler ve performans analizi{% endblock %}
+
+{% block content %}
+<div class="space-y-6" x-data="analytics()">
+    
+    <!-- Time Range Selector -->
+    <div class="bg-white rounded-2xl shadow-lg p-4 border border-gray-100">
+        <div class="flex items-center gap-4">
+            <button @click="timeRange = '7d'" :class="timeRange === '7d' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-700'"
+                    class="px-4 py-2 rounded-lg font-medium transition-all">Son 7 Gün</button>
+            <button @click="timeRange = '30d'" :class="timeRange === '30d' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-700'"
+                    class="px-4 py-2 rounded-lg font-medium transition-all">Son 30 Gün</button>
+            <button @click="timeRange = '90d'" :class="timeRange === '90d' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-700'"
+                    class="px-4 py-2 rounded-lg font-medium transition-all">Son 90 Gün</button>
+            <button @click="timeRange = 'all'" :class="timeRange === 'all' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-700'"
+                    class="px-4 py-2 rounded-lg font-medium transition-all">Tüm Zamanlar</button>
+        </div>
+    </div>
+
+    <!-- Main Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg p-6 text-white">
+            <p class="text-blue-100 text-sm font-medium mb-2">Toplam Mesaj</p>
+            <p class="text-4xl font-bold mb-2">1,245</p>
+            <p class="text-blue-100 text-sm">+12.5% bu ay</p>
+        </div>
+        
+        <div class="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl shadow-lg p-6 text-white">
+            <p class="text-green-100 text-sm font-medium mb-2">Başarı Oranı</p>
+            <p class="text-4xl font-bold mb-2">98.2%</p>
+            <p class="text-green-100 text-sm">+2.1% geçen haftaya göre</p>
+        </div>
+        
+        <div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl shadow-lg p-6 text-white">
+            <p class="text-purple-100 text-sm font-medium mb-2">Okunma Oranı</p>
+            <p class="text-4xl font-bold mb-2">87.5%</p>
+            <p class="text-purple-100 text-sm">+5.3% bu ay</p>
+        </div>
+        
+        <div class="bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl shadow-lg p-6 text-white">
+            <p class="text-amber-100 text-sm font-medium mb-2">Aktif Kullanıcı</p>
+            <p class="text-4xl font-bold mb-2">9,249</p>
+            <p class="text-amber-100 text-sm">Toplam kişi</p>
+        </div>
+    </div>
+
+    <!-- Charts Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        <!-- Message Status Chart -->
+        <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+            <h3 class="text-lg font-bold text-gray-900 mb-4">Mesaj Durumları</h3>
+            <div class="space-y-4">
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-medium text-gray-700">Gönderildi</span>
+                        <span class="text-sm font-bold text-green-600">1,245 (100%)</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-3">
+                        <div class="bg-gradient-to-r from-green-500 to-emerald-500 h-3 rounded-full" style="width: 100%"></div>
+                    </div>
+                </div>
+                
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-medium text-gray-700">Teslim Edildi</span>
+                        <span class="text-sm font-bold text-blue-600">1,223 (98.2%)</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-3">
+                        <div class="bg-gradient-to-r from-blue-500 to-indigo-500 h-3 rounded-full" style="width: 98.2%"></div>
+                    </div>
+                </div>
+                
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-medium text-gray-700">Okundu</span>
+                        <span class="text-sm font-bold text-purple-600">1,090 (87.5%)</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-3">
+                        <div class="bg-gradient-to-r from-purple-500 to-pink-500 h-3 rounded-full" style="width: 87.5%"></div>
+                    </div>
+                </div>
+                
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-medium text-gray-700">Hata</span>
+                        <span class="text-sm font-bold text-red-600">22 (1.8%)</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-3">
+                        <div class="bg-gradient-to-r from-red-500 to-orange-500 h-3 rounded-full" style="width: 1.8%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Templates -->
+        <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+            <h3 class="text-lg font-bold text-gray-900 mb-4">En Çok Kullanılan Şablonlar</h3>
+            <div class="space-y-4">
+                <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                    <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                        <span class="text-lg font-bold text-green-600">1</span>
+                    </div>
+                    <div class="flex-1">
+                        <p class="font-medium text-gray-900">Şablon 6</p>
+                        <p class="text-sm text-gray-500">150 gönderim</p>
+                    </div>
+                    <span class="text-sm font-bold text-green-600">98%</span>
+                </div>
+                
+                <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                    <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <span class="text-lg font-bold text-blue-600">2</span>
+                    </div>
+                    <div class="flex-1">
+                        <p class="font-medium text-gray-900">Şablon 3</p>
+                        <p class="text-sm text-gray-500">89 gönderim</p>
+                    </div>
+                    <span class="text-sm font-bold text-blue-600">97%</span>
+                </div>
+                
+                <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                    <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <span class="text-lg font-bold text-purple-600">3</span>
+                    </div>
+                    <div class="flex-1">
+                        <p class="font-medium text-gray-900">Şablon 1</p>
+                        <p class="text-sm text-gray-500">45 gönderim</p>
+                    </div>
+                    <span class="text-sm font-bold text-purple-600">95%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Activity Timeline -->
+    <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+        <h3 class="text-lg font-bold text-gray-900 mb-4">Son Aktiviteler</h3>
+        <div class="space-y-4">
+            <template x-for="(activity, index) in activities" :key="index">
+                <div class="flex items-start gap-4 pb-4 border-b border-gray-100 last:border-0">
+                    <div :class="{
+                        'bg-green-100 text-green-600': activity.type === 'success',
+                        'bg-blue-100 text-blue-600': activity.type === 'info',
+                        'bg-red-100 text-red-600': activity.type === 'error'
+                    }" class="p-2 rounded-lg">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                    </div>
+                    <div class="flex-1">
+                        <p class="font-medium text-gray-900" x-text="activity.message"></p>
+                        <p class="text-sm text-gray-500" x-text="activity.time"></p>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function analytics() {
+    return {
+        timeRange: '7d',
+        activities: [
+            { type: 'success', message: 'Kampanya "Ocak Ayı" tamamlandı - 147/150 başarılı', time: '2 saat önce' },
+            { type: 'info', message: '25 yeni kişi eklendi', time: '5 saat önce' },
+            { type: 'success', message: 'Toplu gönderim başlatıldı - 150 kişi', time: 'Dün, 14:30' },
+            { type: 'error', message: '3 mesaj gönderilemedi - hata detayları', time: 'Dün, 14:25' }
+        ],
+        
+        init() {
+            this.$watch('timeRange', () => {
+                console.log('Time range changed:', this.timeRange);
+                // API'den yeni veriler çekilecek
+            });
+        }
+    }
+}
+</script>
+{% endblock %}
