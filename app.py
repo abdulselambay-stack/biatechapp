@@ -9,6 +9,10 @@ import time
 import logging
 from typing import List, Dict, Set
 
+# MongoDB imports
+from database import get_database
+from models import ContactModel, MessageModel, CampaignModel, WebhookLogModel, ChatModel
+
 # .env dosyasını manuel yükle
 def load_env_file():
     env_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -454,8 +458,28 @@ def receive_webhook():
 # ==================== API ENDPOINTS ====================
 @app.route("/")
 def index():
-    """Ana sayfa - Web arayüzü"""
-    return render_template("dashboard.html")
+    """Ana sayfa - Modern dashboard"""
+    return render_template("dashboard_modern.html")
+
+@app.route("/contacts")
+def contacts_page():
+    """Kişiler sayfası"""
+    return render_template("contacts.html")
+
+@app.route("/campaigns")
+def campaigns_page():
+    """Kampanyalar sayfası"""
+    return render_template("campaigns.html")
+
+@app.route("/analytics")
+def analytics_page():
+    """Analitik sayfası"""
+    return render_template("analytics.html")
+
+@app.route("/settings")
+def settings_page():
+    """Ayarlar sayfası"""
+    return render_template("settings.html")
 
 @app.route("/uploads/<filename>")
 def serve_upload(filename):
@@ -1232,6 +1256,160 @@ logger.info(f"📂 Geçmiş dosyası: {MESSAGE_HISTORY_FILE}")
 logger.info(f"📂 İşlenen dosyası: {PROCESSED_FILE}")
 logger.info(f"📂 Webhook log dosyası: {WEBHOOK_LOG_FILE}")
 logger.info("=" * 60)
+
+# MongoDB bağlantısını başlat
+try:
+    db = get_database()
+    logger.info(f"✅ MongoDB bağlantısı: {db.name}")
+except Exception as e:
+    logger.warning(f"⚠️ MongoDB bağlantısı başarısız (fallback to JSON): {e}")
+
+# ==================== MONGODB API ENDPOINTS ====================
+
+@app.route("/api/stats", methods=["GET"])
+def api_stats():
+    """Dashboard istatistikleri - MongoDB"""
+    try:
+        stats = MessageModel.get_stats()
+        contacts_count = ContactModel.get_collection().count_documents({"is_active": True})
+        
+        return jsonify({
+            "total_contacts": contacts_count,
+            "sent": stats.get("sent", 0),
+            "delivered": stats.get("delivered", 0),
+            "read": stats.get("read", 0),
+            "failed": stats.get("failed", 0),
+            "pending": stats.get("pending", 0),
+            "total_messages": stats.get("total", 0)
+        })
+    except Exception as e:
+        logger.error(f"Stats error: {e}")
+        return jsonify({
+            "total_contacts": 0,
+            "sent": 0,
+            "delivered": 0,
+            "read": 0,
+            "failed": 0
+        })
+
+@app.route("/api/recent-activity", methods=["GET"])
+def api_recent_activity():
+    """Son aktiviteler"""
+    try:
+        logs = WebhookLogModel.get_recent_logs(limit=20)
+        
+        activities = []
+        for log in logs:
+            activity_type = log.get("event_type", "unknown")
+            phone = log.get("phone", "Unknown")
+            
+            if activity_type == "status":
+                status = log.get("data", {}).get("status", "unknown")
+                activities.append({
+                    "id": str(log["_id"]),
+                    "type": status,
+                    "message": f"Mesaj {status}: {phone}",
+                    "time": log["timestamp"]
+                })
+            elif activity_type == "incoming_message":
+                activities.append({
+                    "id": str(log["_id"]),
+                    "type": "incoming",
+                    "message": f"Gelen mesaj: {phone}",
+                    "time": log["timestamp"]
+                })
+        
+        return jsonify(activities)
+    except Exception as e:
+        logger.error(f"Activity error: {e}")
+        return jsonify([])
+
+@app.route("/api/contacts-mongo", methods=["GET"])
+def api_get_contacts_mongo():
+    """MongoDB'den kişileri getir"""
+    try:
+        tags = request.args.get("tags")
+        tag_list = tags.split(",") if tags else None
+        
+        contacts = ContactModel.get_all_contacts(tags=tag_list)
+        
+        return jsonify({
+            "success": True,
+            "contacts": contacts,
+            "count": len(contacts)
+        })
+    except Exception as e:
+        logger.error(f"Contacts error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/contacts-mongo", methods=["POST"])
+def api_create_contact():
+    """Yeni kişi ekle - MongoDB"""
+    try:
+        data = request.get_json()
+        phone = data.get("phone")
+        name = data.get("name")
+        
+        if not phone or not name:
+            return jsonify({"success": False, "error": "Phone ve name gerekli"}), 400
+        
+        # Mevcut mi kontrol et
+        existing = ContactModel.get_contact(phone)
+        if existing:
+            return jsonify({"success": False, "error": "Bu numara zaten kayıtlı"}), 400
+        
+        contact = ContactModel.create_contact(
+            phone=phone,
+            name=name,
+            country=data.get("country", ""),
+            tags=data.get("tags", [])
+        )
+        
+        return jsonify({
+            "success": True,
+            "contact": contact
+        })
+    except Exception as e:
+        logger.error(f"Create contact error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/contacts-mongo/<phone>", methods=["PUT"])
+def api_update_contact(phone):
+    """Kişi güncelle - MongoDB"""
+    try:
+        data = request.get_json()
+        
+        updates = {}
+        if "name" in data:
+            updates["name"] = data["name"]
+        if "country" in data:
+            updates["country"] = data["country"]
+        if "tags" in data:
+            updates["tags"] = data["tags"]
+        
+        success = ContactModel.update_contact(phone, updates)
+        
+        return jsonify({
+            "success": success,
+            "message": "Kişi güncellendi" if success else "Kişi bulunamadı"
+        })
+    except Exception as e:
+        logger.error(f"Update contact error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/contacts-mongo/<phone>", methods=["DELETE"])
+def api_delete_contact(phone):
+    """Kişi sil - MongoDB"""
+    try:
+        success = ContactModel.delete_contact(phone)
+        
+        return jsonify({
+            "success": success,
+            "message": "Kişi silindi" if success else "Kişi bulunamadı"
+        })
+    except Exception as e:
+        logger.error(f"Delete contact error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 # Only run Flask dev server when executed directly (not with gunicorn)
 if __name__ == "__main__":

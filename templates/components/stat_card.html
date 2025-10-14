@@ -1,0 +1,34 @@
+<!-- Stat Card Component -->
+{% macro stat_card(title, value, subtitle, icon, color="green", trend=None) %}
+<div class="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 border border-gray-100 hover:border-{{ color }}-200 group">
+    <div class="flex items-start justify-between">
+        <div class="flex-1">
+            <p class="text-sm font-medium text-gray-500 mb-1">{{ title }}</p>
+            <h3 class="text-3xl font-bold text-gray-900 mb-2">{{ value }}</h3>
+            {% if subtitle %}
+            <p class="text-sm text-gray-600">{{ subtitle }}</p>
+            {% endif %}
+            
+            {% if trend %}
+            <div class="flex items-center gap-1 mt-2">
+                {% if trend > 0 %}
+                <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                </svg>
+                <span class="text-sm font-medium text-green-600">+{{ trend }}%</span>
+                {% else %}
+                <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0v-8m0 8l-8-8-4 4-6-6"></path>
+                </svg>
+                <span class="text-sm font-medium text-red-600">{{ trend }}%</span>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="bg-{{ color }}-50 p-3 rounded-xl group-hover:bg-{{ color }}-100 transition-colors duration-300">
+            {{ icon|safe }}
+        </div>
+    </div>
+</div>
+{% endmacro %}
