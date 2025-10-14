@@ -4,6 +4,7 @@ MongoDB Collection Models ve Helper Functions
 from datetime import datetime
 from typing import Dict, List, Optional
 from pymongo.collection import Collection
+from bson.objectid import ObjectId
 from database import get_database
 
 class ContactModel:
@@ -321,3 +322,149 @@ class ChatModel:
             chat['last_message_time'] = chat['last_message_time'].isoformat()
         
         return chats
+
+class SalesModel:
+    """Satış Takip Sistemi"""
+    
+    @staticmethod
+    def get_collection() -> Collection:
+        return get_database()['sales']
+    
+    @staticmethod
+    def create_sale(phone: str, customer_name: str, amount: float, profit: float, 
+                    currency: str = "USD", product: str = "", notes: str = "") -> Dict:
+        """Yeni satış kaydı oluştur"""
+        sale = {
+            "phone": phone,
+            "customer_name": customer_name,
+            "amount": float(amount),  # Toplam satış tutarı
+            "profit": float(profit),   # Kar
+            "currency": currency,
+            "product": product,
+            "notes": notes,
+            "sale_date": datetime.utcnow(),
+            "created_at": datetime.utcnow(),
+            "status": "completed"  # completed, pending, cancelled
+        }
+        
+        result = SalesModel.get_collection().insert_one(sale)
+        sale['_id'] = str(result.inserted_id)
+        
+        # Contact'a satış flag'i ekle
+        ContactModel.get_collection().update_one(
+            {"phone": phone},
+            {
+                "$set": {"has_sale": True, "last_sale_date": datetime.utcnow()},
+                "$inc": {"total_sales": 1}
+            }
+        )
+        
+        return sale
+    
+    @staticmethod
+    def get_all_sales(limit: int = 100, skip: int = 0) -> List[Dict]:
+        """Tüm satışları getir"""
+        sales = list(SalesModel.get_collection()
+                    .find()
+                    .sort("sale_date", -1)
+                    .skip(skip)
+                    .limit(limit))
+        
+        for sale in sales:
+            sale['_id'] = str(sale['_id'])
+            sale['sale_date'] = sale['sale_date'].isoformat()
+            sale['created_at'] = sale['created_at'].isoformat()
+        
+        return sales
+    
+    @staticmethod
+    def get_sales_by_phone(phone: str) -> List[Dict]:
+        """Bir kişinin tüm satışlarını getir"""
+        sales = list(SalesModel.get_collection()
+                    .find({"phone": phone})
+                    .sort("sale_date", -1))
+        
+        for sale in sales:
+            sale['_id'] = str(sale['_id'])
+            sale['sale_date'] = sale['sale_date'].isoformat()
+            sale['created_at'] = sale['created_at'].isoformat()
+        
+        return sales
+    
+    @staticmethod
+    def get_sales_stats() -> Dict:
+        """Satış istatistikleri"""
+        pipeline = [
+            {
+                "$group": {
+                    "_id": None,
+                    "total_sales": {"$sum": 1},
+                    "total_amount": {"$sum": "$amount"},
+                    "total_profit": {"$sum": "$profit"},
+                    "avg_sale": {"$avg": "$amount"},
+                    "avg_profit": {"$avg": "$profit"}
+                }
+            }
+        ]
+        
+        result = list(SalesModel.get_collection().aggregate(pipeline))
+        
+        if result:
+            stats = result[0]
+            stats.pop('_id')
+            return stats
+        
+        return {
+            "total_sales": 0,
+            "total_amount": 0,
+            "total_profit": 0,
+            "avg_sale": 0,
+            "avg_profit": 0
+        }
+    
+    @staticmethod
+    def get_top_customers(limit: int = 10) -> List[Dict]:
+        """En çok satış yapılan müşteriler"""
+        pipeline = [
+            {
+                "$group": {
+                    "_id": "$phone",
+                    "customer_name": {"$first": "$customer_name"},
+                    "total_sales": {"$sum": 1},
+                    "total_amount": {"$sum": "$amount"},
+                    "total_profit": {"$sum": "$profit"},
+                    "last_sale": {"$max": "$sale_date"}
+                }
+            },
+            {"$sort": {"total_amount": -1}},
+            {"$limit": limit}
+        ]
+        
+        customers = list(SalesModel.get_collection().aggregate(pipeline))
+        
+        for customer in customers:
+            customer['phone'] = customer.pop('_id')
+            customer['last_sale'] = customer['last_sale'].isoformat()
+        
+        return customers
+    
+    @staticmethod
+    def update_sale(sale_id: str, data: Dict) -> bool:
+        """Satış güncelle"""
+        try:
+            result = SalesModel.get_collection().update_one(
+                {"_id": ObjectId(sale_id)},
+                {"$set": data}
+            )
+            return result.modified_count > 0
+        except:
+            return False
+    
+    @staticmethod
+    def delete_sale(sale_id: str) -> bool:
+        """Satış sil"""
+        try:
+            result = SalesModel.get_collection().delete_one({"_id": ObjectId(sale_id)})
+            return result.deleted_count > 0
+        except:
+            return False

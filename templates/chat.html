@@ -91,7 +91,7 @@
                         <!-- Send Options -->
                         <div x-show="showSendOptions" 
                              x-transition
-                             class="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-gray-200">
+                             class="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-gray-200">
                             <button @click="sendQuickMessage()" 
                                     class="flex items-center gap-2 px-3 py-2 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg text-sm transition-colors">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -105,6 +105,13 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                                 </svg>
                                 Template
+                            </button>
+                            <button @click="openSaleModal()" 
+                                    class="flex items-center gap-2 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg text-sm transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                Satış Yap
                             </button>
                         </div>
                     </div>
@@ -217,6 +224,79 @@
         </div>
     </div>
 
+    <!-- Sale Modal -->
+    <div x-show="showSaleModal" 
+         x-cloak
+         @click.self="showSaleModal = false"
+         class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+         x-transition>
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" @click.stop>
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold text-gray-900">💰 Satış Kaydı</h3>
+                <button @click="showSaleModal = false" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <form @submit.prevent="saveSale()" class="space-y-4">
+                <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                    <p class="text-sm text-blue-700">
+                        <strong x-text="selectedChat?.name || selectedPhone"></strong> için satış kaydı
+                    </p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Satış Tutarı ($) *</label>
+                    <input type="number" x-model="saleData.amount" required step="0.01" min="0"
+                           placeholder="1000.00"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Kar ($) *</label>
+                    <input type="number" x-model="saleData.profit" required step="0.01" min="0"
+                           placeholder="250.00"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Ürün/Hizmet</label>
+                    <input type="text" x-model="saleData.product"
+                           placeholder="iPhone 15 Pro"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Notlar</label>
+                    <textarea x-model="saleData.notes" rows="2"
+                              placeholder="Ek bilgiler..."
+                              class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500"></textarea>
+                </div>
+
+                <!-- Summary -->
+                <div class="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm text-gray-600">Kar Marjı:</span>
+                        <span class="font-bold text-purple-600" x-text="calculateSaleMargin() + '%'"></span>
+                    </div>
+                </div>
+
+                <div class="flex gap-3">
+                    <button type="button" @click="showSaleModal = false"
+                            class="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-medium">
+                        İptal
+                    </button>
+                    <button type="submit"
+                            class="flex-1 px-4 py-3 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white rounded-xl font-medium">
+                        Kaydet
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Template Send Modal -->
     <div x-show="showTemplateModal" 
          x-cloak
@@ -304,8 +384,15 @@ function chat() {
         newMessage: '',
         showNewChatModal: false,
         showTemplateModal: false,
+        showSaleModal: false,
         showSendOptions: false,
         selectedTemplate: '',
+        saleData: {
+            amount: '',
+            profit: '',
+            product: '',
+            notes: ''
+        },
         stats: {
             total_chats: 0,
             total_sent: 0,
@@ -451,6 +538,53 @@ function chat() {
                 }
             } catch (error) {
                 alert('❌ Hata: ' + error.message);
+            }
+        },
+        
+        openSaleModal() {
+            this.showSendOptions = false;
+            this.showSaleModal = true;
+            this.saleData = {
+                amount: '',
+                profit: '',
+                product: '',
+                notes: ''
+            };
+        },
+        
+        calculateSaleMargin() {
+            const amount = parseFloat(this.saleData.amount) || 0;
+            const profit = parseFloat(this.saleData.profit) || 0;
+            
+            if (amount === 0) return 0;
+            return ((profit / amount) * 100).toFixed(1);
+        },
+        
+        async saveSale() {
+            try {
+                const response = await fetch('/api/sales', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        phone: this.selectedPhone,
+                        customer_name: this.selectedChat?.name || this.selectedPhone,
+                        amount: this.saleData.amount,
+                        profit: this.saleData.profit,
+                        product: this.saleData.product,
+                        notes: this.saleData.notes
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('✅ Satış kaydedildi!');
+                    this.showSaleModal = false;
+                } else {
+                    alert('❌ Hata: ' + data.error);
+                }
+            } catch (error) {
+                alert('❌ Bağlantı hatası: ' + error.message);
             }
         },
         

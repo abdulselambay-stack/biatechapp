@@ -11,7 +11,7 @@ from typing import List, Dict, Set
 
 # MongoDB imports
 from database import get_database
-from models import ContactModel, MessageModel, CampaignModel, WebhookLogModel, ChatModel
+from models import ContactModel, MessageModel, CampaignModel, WebhookLogModel, ChatModel, SalesModel
 
 # .env dosyasını manuel yükle
 def load_env_file():
@@ -567,6 +567,11 @@ def settings_page():
 def chat_page():
     """Chat sayfası"""
     return render_template("chat.html")
+
+@app.route("/sales")
+def sales_page():
+    """Satışlar sayfası"""
+    return render_template("sales.html")
 
 @app.route("/uploads/<filename>")
 def serve_upload(filename):
@@ -1597,6 +1602,121 @@ def api_send_chat_message():
         logger.error(f"❌ Send chat message error: {e}")
         import traceback
         logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# ==================== SALES API ENDPOINTS ====================
+
+@app.route("/api/sales", methods=["GET"])
+def api_get_sales():
+    """Tüm satışları getir"""
+    try:
+        limit = int(request.args.get("limit", 100))
+        skip = int(request.args.get("skip", 0))
+        
+        sales = SalesModel.get_all_sales(limit=limit, skip=skip)
+        
+        return jsonify({
+            "success": True,
+            "sales": sales
+        })
+    except Exception as e:
+        logger.error(f"Get sales error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/sales/stats", methods=["GET"])
+def api_get_sales_stats():
+    """Satış istatistikleri"""
+    try:
+        stats = SalesModel.get_sales_stats()
+        top_customers = SalesModel.get_top_customers(limit=5)
+        
+        return jsonify({
+            "success": True,
+            "stats": stats,
+            "top_customers": top_customers
+        })
+    except Exception as e:
+        logger.error(f"Get sales stats error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/sales/<phone>", methods=["GET"])
+def api_get_customer_sales(phone):
+    """Bir müşterinin satışlarını getir"""
+    try:
+        sales = SalesModel.get_sales_by_phone(phone)
+        
+        return jsonify({
+            "success": True,
+            "sales": sales
+        })
+    except Exception as e:
+        logger.error(f"Get customer sales error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/sales", methods=["POST"])
+def api_create_sale():
+    """Yeni satış kaydı oluştur"""
+    try:
+        data = request.get_json()
+        
+        phone = data.get("phone")
+        customer_name = data.get("customer_name")
+        amount = data.get("amount")
+        profit = data.get("profit")
+        
+        if not all([phone, customer_name, amount, profit]):
+            return jsonify({
+                "success": False,
+                "error": "phone, customer_name, amount, profit gerekli"
+            }), 400
+        
+        sale = SalesModel.create_sale(
+            phone=phone,
+            customer_name=customer_name,
+            amount=float(amount),
+            profit=float(profit),
+            currency=data.get("currency", "USD"),
+            product=data.get("product", ""),
+            notes=data.get("notes", "")
+        )
+        
+        logger.info(f"✅ New sale created: {customer_name} - ${amount} (Profit: ${profit})")
+        
+        return jsonify({
+            "success": True,
+            "sale": sale
+        })
+    except Exception as e:
+        logger.error(f"Create sale error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/sales/<sale_id>", methods=["PUT"])
+def api_update_sale(sale_id):
+    """Satış güncelle"""
+    try:
+        data = request.get_json()
+        success = SalesModel.update_sale(sale_id, data)
+        
+        return jsonify({
+            "success": success,
+            "message": "Satış güncellendi" if success else "Satış bulunamadı"
+        })
+    except Exception as e:
+        logger.error(f"Update sale error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/sales/<sale_id>", methods=["DELETE"])
+def api_delete_sale(sale_id):
+    """Satış sil"""
+    try:
+        success = SalesModel.delete_sale(sale_id)
+        
+        return jsonify({
+            "success": success,
+            "message": "Satış silindi" if success else "Satış bulunamadı"
+        })
+    except Exception as e:
+        logger.error(f"Delete sale error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 # Only run Flask dev server when executed directly (not with gunicorn)

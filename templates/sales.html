@@ -1,0 +1,482 @@
+{% extends "base.html" %}
+
+{% block title %}Satışlar - WhatsApp Cloud API{% endblock %}
+{% block page_title %}Satış Yönetimi{% endblock %}
+{% block page_subtitle %}Tüm satışlarınız ve kar takibi{% endblock %}
+
+{% block content %}
+<div class="space-y-6" x-data="sales()">
+    
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div class="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl shadow-lg p-6 text-white">
+            <div class="flex items-center justify-between mb-4">
+                <div class="p-3 bg-white/20 rounded-xl">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+            </div>
+            <p class="text-green-100 text-sm mb-1">Toplam Satış</p>
+            <p class="text-3xl font-bold" x-text="stats.total_sales">0</p>
+        </div>
+
+        <div class="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-lg p-6 text-white">
+            <div class="flex items-center justify-between mb-4">
+                <div class="p-3 bg-white/20 rounded-xl">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                    </svg>
+                </div>
+            </div>
+            <p class="text-blue-100 text-sm mb-1">Toplam Ciro</p>
+            <p class="text-3xl font-bold">$<span x-text="formatNumber(stats.total_amount)">0</span></p>
+        </div>
+
+        <div class="bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl shadow-lg p-6 text-white">
+            <div class="flex items-center justify-between mb-4">
+                <div class="p-3 bg-white/20 rounded-xl">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                    </svg>
+                </div>
+            </div>
+            <p class="text-purple-100 text-sm mb-1">Toplam Kar</p>
+            <p class="text-3xl font-bold">$<span x-text="formatNumber(stats.total_profit)">0</span></p>
+        </div>
+
+        <div class="bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl shadow-lg p-6 text-white">
+            <div class="flex items-center justify-between mb-4">
+                <div class="p-3 bg-white/20 rounded-xl">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                </div>
+            </div>
+            <p class="text-amber-100 text-sm mb-1">Ortalama Satış</p>
+            <p class="text-3xl font-bold">$<span x-text="formatNumber(stats.avg_sale)">0</span></p>
+        </div>
+    </div>
+
+    <!-- Action Bar -->
+    <div class="bg-white rounded-2xl shadow-lg p-4 border border-gray-100">
+        <div class="flex flex-col md:flex-row gap-4 items-center justify-between">
+            <h3 class="text-lg font-bold text-gray-900">Satış Listesi</h3>
+            <button @click="openAddSale()" 
+                    class="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl font-medium transition-all shadow-lg hover:shadow-xl">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                </svg>
+                Yeni Satış Ekle
+            </button>
+        </div>
+    </div>
+
+    <!-- Sales Table -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Sales List -->
+        <div class="lg:col-span-2 bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Müşteri</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Ürün</th>
+                            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Tutar</th>
+                            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Kar</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Tarih</th>
+                            <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">İşlem</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        <template x-for="sale in sales" :key="sale._id">
+                            <tr class="hover:bg-gray-50 transition-colors">
+                                <td class="px-4 py-4">
+                                    <div>
+                                        <p class="font-medium text-gray-900" x-text="sale.customer_name"></p>
+                                        <p class="text-sm text-gray-500" x-text="sale.phone"></p>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-4">
+                                    <span class="text-sm text-gray-700" x-text="sale.product || '-'"></span>
+                                </td>
+                                <td class="px-4 py-4 text-right">
+                                    <span class="font-semibold text-blue-600">$<span x-text="formatNumber(sale.amount)"></span></span>
+                                </td>
+                                <td class="px-4 py-4 text-right">
+                                    <span class="font-semibold text-green-600">$<span x-text="formatNumber(sale.profit)"></span></span>
+                                </td>
+                                <td class="px-4 py-4">
+                                    <span class="text-sm text-gray-500" x-text="formatDate(sale.sale_date)"></span>
+                                </td>
+                                <td class="px-4 py-4 text-right">
+                                    <div class="flex items-center justify-end gap-2">
+                                        <button @click="viewSale(sale)" 
+                                                class="p-2 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                            </svg>
+                                        </button>
+                                        <button @click="deleteSale(sale)" 
+                                                class="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-colors">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Empty State -->
+            <div x-show="sales.length === 0" class="p-12 text-center">
+                <svg class="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <h3 class="text-xl font-bold text-gray-900 mb-2">Henüz satış yok</h3>
+                <p class="text-gray-500 mb-6">İlk satışınızı ekleyin</p>
+                <button @click="openAddSale()" 
+                        class="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-medium hover:shadow-lg transition-all">
+                    Yeni Satış Ekle
+                </button>
+            </div>
+        </div>
+
+        <!-- Top Customers -->
+        <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+            <h3 class="text-lg font-bold text-gray-900 mb-4">🏆 En İyi Müşteriler</h3>
+            <div class="space-y-4">
+                <template x-for="(customer, index) in topCustomers" :key="customer.phone">
+                    <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                        <div :class="{
+                            'bg-yellow-400': index === 0,
+                            'bg-gray-300': index === 1,
+                            'bg-amber-600': index === 2,
+                            'bg-gray-200': index > 2
+                        }" class="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                            <span x-text="index + 1"></span>
+                        </div>
+                        <div class="flex-1">
+                            <p class="font-medium text-gray-900" x-text="customer.customer_name"></p>
+                            <p class="text-xs text-gray-500"><span x-text="customer.total_sales"></span> satış</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="font-bold text-green-600">$<span x-text="formatNumber(customer.total_profit)"></span></p>
+                            <p class="text-xs text-gray-500">kar</p>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Sale Modal -->
+    <div x-show="showAddModal" 
+         x-cloak
+         @click.self="showAddModal = false"
+         class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+         x-transition>
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6" @click.stop>
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-2xl font-bold text-gray-900">Yeni Satış Ekle</h3>
+                <button @click="showAddModal = false" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <form @submit.prevent="saveSale()" class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Müşteri Seç *</label>
+                        <select x-model="formData.phone" required
+                                @change="selectCustomer()"
+                                class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
+                            <option value="">Seçiniz...</option>
+                            <template x-for="contact in contacts" :key="contact.phone">
+                                <option :value="contact.phone" x-text="`${contact.name} (${contact.phone})`"></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Satış Tutarı ($) *</label>
+                        <input type="number" x-model="formData.amount" required step="0.01" min="0"
+                               placeholder="1000.00"
+                               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Kar ($) *</label>
+                        <input type="number" x-model="formData.profit" required step="0.01" min="0"
+                               placeholder="250.00"
+                               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
+                    </div>
+
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Ürün/Hizmet</label>
+                        <input type="text" x-model="formData.product"
+                               placeholder="iPhone 15 Pro"
+                               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
+                    </div>
+
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Notlar</label>
+                        <textarea x-model="formData.notes" rows="3"
+                                  placeholder="Ek bilgiler..."
+                                  class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500"></textarea>
+                    </div>
+                </div>
+
+                <!-- Sale Summary -->
+                <div class="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm text-gray-600">Satış Tutarı:</span>
+                        <span class="font-bold text-blue-600">$<span x-text="formData.amount || 0"></span></span>
+                    </div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm text-gray-600">Kar:</span>
+                        <span class="font-bold text-green-600">$<span x-text="formData.profit || 0"></span></span>
+                    </div>
+                    <div class="flex items-center justify-between pt-2 border-t border-green-200">
+                        <span class="text-sm font-semibold text-gray-700">Kar Marjı:</span>
+                        <span class="font-bold text-purple-600" x-text="calculateMargin() + '%'"></span>
+                    </div>
+                </div>
+
+                <div class="flex gap-3 pt-4">
+                    <button type="button" @click="showAddModal = false"
+                            class="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-medium transition-colors">
+                        İptal
+                    </button>
+                    <button type="submit"
+                            class="flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl font-medium transition-all">
+                        Satışı Kaydet
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- View Sale Modal -->
+    <div x-show="showViewModal" 
+         x-cloak
+         @click.self="showViewModal = false"
+         class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+         x-transition>
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" @click.stop>
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold text-gray-900">Satış Detayı</h3>
+                <button @click="showViewModal = false" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <template x-if="selectedSale">
+                <div class="space-y-4">
+                    <div>
+                        <p class="text-sm text-gray-500 mb-1">Müşteri</p>
+                        <p class="font-semibold text-gray-900" x-text="selectedSale.customer_name"></p>
+                        <p class="text-sm text-gray-600" x-text="selectedSale.phone"></p>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <p class="text-sm text-gray-500 mb-1">Satış Tutarı</p>
+                            <p class="text-xl font-bold text-blue-600">$<span x-text="formatNumber(selectedSale.amount)"></span></p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-500 mb-1">Kar</p>
+                            <p class="text-xl font-bold text-green-600">$<span x-text="formatNumber(selectedSale.profit)"></span></p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <p class="text-sm text-gray-500 mb-1">Ürün/Hizmet</p>
+                        <p class="font-medium text-gray-900" x-text="selectedSale.product || '-'"></p>
+                    </div>
+
+                    <div>
+                        <p class="text-sm text-gray-500 mb-1">Tarih</p>
+                        <p class="font-medium text-gray-900" x-text="formatDate(selectedSale.sale_date)"></p>
+                    </div>
+
+                    <div x-show="selectedSale.notes">
+                        <p class="text-sm text-gray-500 mb-1">Notlar</p>
+                        <p class="text-gray-700" x-text="selectedSale.notes"></p>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function sales() {
+    return {
+        sales: [],
+        contacts: [],
+        topCustomers: [],
+        showAddModal: false,
+        showViewModal: false,
+        selectedSale: null,
+        formData: {
+            phone: '',
+            customer_name: '',
+            amount: '',
+            profit: '',
+            product: '',
+            notes: ''
+        },
+        stats: {
+            total_sales: 0,
+            total_amount: 0,
+            total_profit: 0,
+            avg_sale: 0
+        },
+        
+        init() {
+            this.loadSales();
+            this.loadContacts();
+            this.loadStats();
+        },
+        
+        async loadSales() {
+            try {
+                const response = await fetch('/api/sales');
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.sales = data.sales;
+                }
+            } catch (error) {
+                console.error('Satışlar yükleme hatası:', error);
+            }
+        },
+        
+        async loadContacts() {
+            try {
+                const response = await fetch('/api/contacts-mongo');
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.contacts = data.contacts;
+                }
+            } catch (error) {
+                console.error('Kişiler yükleme hatası:', error);
+            }
+        },
+        
+        async loadStats() {
+            try {
+                const response = await fetch('/api/sales/stats');
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.stats = data.stats;
+                    this.topCustomers = data.top_customers;
+                }
+            } catch (error) {
+                console.error('İstatistikler yükleme hatası:', error);
+            }
+        },
+        
+        openAddSale() {
+            this.formData = {
+                phone: '',
+                customer_name: '',
+                amount: '',
+                profit: '',
+                product: '',
+                notes: ''
+            };
+            this.showAddModal = true;
+        },
+        
+        selectCustomer() {
+            const contact = this.contacts.find(c => c.phone === this.formData.phone);
+            if (contact) {
+                this.formData.customer_name = contact.name;
+            }
+        },
+        
+        calculateMargin() {
+            const amount = parseFloat(this.formData.amount) || 0;
+            const profit = parseFloat(this.formData.profit) || 0;
+            
+            if (amount === 0) return 0;
+            return ((profit / amount) * 100).toFixed(1);
+        },
+        
+        async saveSale() {
+            try {
+                const response = await fetch('/api/sales', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.formData)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('✅ Satış kaydedildi!');
+                    this.showAddModal = false;
+                    this.loadSales();
+                    this.loadStats();
+                } else {
+                    alert('❌ Hata: ' + data.error);
+                }
+            } catch (error) {
+                alert('❌ Bağlantı hatası: ' + error.message);
+            }
+        },
+        
+        viewSale(sale) {
+            this.selectedSale = sale;
+            this.showViewModal = true;
+        },
+        
+        async deleteSale(sale) {
+            if (!confirm(`${sale.customer_name} müşterisinin satışını silmek istediğinizden emin misiniz?`)) return;
+            
+            try {
+                const response = await fetch(`/api/sales/${sale._id}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('✅ Satış silindi');
+                    this.loadSales();
+                    this.loadStats();
+                } else {
+                    alert('❌ Hata: ' + data.message);
+                }
+            } catch (error) {
+                alert('❌ Bağlantı hatası: ' + error.message);
+            }
+        },
+        
+        formatNumber(num) {
+            return parseFloat(num || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        },
+        
+        formatDate(dateString) {
+            if (!dateString) return '-';
+            const date = new Date(dateString);
+            return date.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric' });
+        }
+    }
+}
+</script>
+{% endblock %}
