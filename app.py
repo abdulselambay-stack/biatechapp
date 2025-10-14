@@ -1210,43 +1210,34 @@ if not os.path.exists(WEBHOOK_LOG_FILE):
 if not os.path.exists(PROCESSED_FILE):
     save_json(PROCESSED_FILE, {})
 
+# Startup logging (runs on import for both gunicorn and direct run)
+logger.info("=" * 60)
+logger.info("🚀 WhatsApp Cloud API Başlatılıyor...")
+logger.info("=" * 60)
+
+# Token kontrolü
+if ACCESS_TOKEN == "YOUR_ACCESS_TOKEN_HERE" or not ACCESS_TOKEN:
+    logger.warning("⚠️  UYARI: ACCESS_TOKEN ayarlanmamış!")
+else:
+    logger.info(f"✅ ACCESS_TOKEN yüklendi (ilk 10 karakter: {ACCESS_TOKEN[:10]}...)")
+
+if PHONE_NUMBER_ID == "YOUR_PHONE_NUMBER_ID_HERE" or not PHONE_NUMBER_ID:
+    logger.warning("⚠️  UYARI: PHONE_NUMBER_ID ayarlanmamış!")
+else:
+    logger.info(f"✅ PHONE_NUMBER_ID: {PHONE_NUMBER_ID}")
+
+logger.info("=" * 60)
+logger.info(f"📂 Kişi dosyası: {CONTACTS_FILE}")
+logger.info(f"📂 Geçmiş dosyası: {MESSAGE_HISTORY_FILE}")
+logger.info(f"📂 İşlenen dosyası: {PROCESSED_FILE}")
+logger.info(f"📂 Webhook log dosyası: {WEBHOOK_LOG_FILE}")
+logger.info("=" * 60)
+
+# Only run Flask dev server when executed directly (not with gunicorn)
 if __name__ == "__main__":
-    logger.info("=" * 60)
-    logger.info("🚀 WhatsApp Cloud API Başlatılıyor...")
-    logger.info("=" * 60)
-    
-    # Token kontrolü
-    if ACCESS_TOKEN == "YOUR_ACCESS_TOKEN_HERE" or not ACCESS_TOKEN:
-        logger.warning("⚠️  UYARI: ACCESS_TOKEN ayarlanmamış!")
-        logger.warning("⚠️  .env dosyasını düzenleyin ve gerçek token'ınızı girin")
-    else:
-        logger.info(f"✅ ACCESS_TOKEN yüklendi (ilk 10 karakter: {ACCESS_TOKEN[:10]}...)")
-    
-    if PHONE_NUMBER_ID == "YOUR_PHONE_NUMBER_ID_HERE" or not PHONE_NUMBER_ID:
-        logger.warning("⚠️  UYARI: PHONE_NUMBER_ID ayarlanmamış!")
-    else:
-        logger.info(f"✅ PHONE_NUMBER_ID: {PHONE_NUMBER_ID}")
-    
-    logger.info("=" * 60)
-    logger.info(f"📂 Kişi dosyası: {CONTACTS_FILE}")
-    logger.info(f"📂 Geçmiş dosyası: {MESSAGE_HISTORY_FILE}")
-    logger.info(f"📂 İşlenen dosyası: {PROCESSED_FILE}")
-    logger.info(f"📂 Webhook log dosyası: {WEBHOOK_LOG_FILE}")
-    logger.info("=" * 60)
-    
-    # Railway/Production için PORT environment variable
     port = int(os.environ.get("PORT", 5005))
-    
-    if port != 5005:
-        # Production (Railway)
-        logger.info(f"🚀 Production Mode - Port: {port}")
-        logger.info("🔗 Webhook URL: https://biatechapp-production.up.railway.app/webhook")
-    else:
-        # Local development
-        logger.info("🌐 Dashboard: http://localhost:5005")
-        logger.info("🔗 Webhook URL: https://vina-supermasculine-afterwards.ngrok-free.dev/webhook")
-        logger.info("💡 Ngrok: ngrok http 5005")
-    
+    logger.info("🌐 Flask Development Server")
+    logger.info(f"📍 Port: {port}")
+    logger.info("⚠️  Use gunicorn for production!")
     logger.info("=" * 60)
-    
-    app.run(host="0.0.0.0", port=port, debug=(port == 5005))
+    app.run(host="0.0.0.0", port=port, debug=True)
