@@ -1,14 +1,12 @@
-from flask import Flask, request, jsonify, render_template, Response, stream_with_context, send_from_directory
-import json
-import datetime
-import requests
+from flask import Flask, request, jsonify, send_from_directory, render_template
+from dotenv import load_dotenv
 import os
-import csv
-import io
-import time
+import json
+import requests
+import datetime
 import threading
-import base64
-import uuid
+import time
+import logging
 from typing import List, Dict, Set
 
 # .env dosyasını manuel yükle
@@ -25,6 +23,16 @@ def load_env_file():
 load_env_file()
 
 app = Flask(__name__)
+
+# ==================== LOGGING ====================
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # ==================== AYARLAR ====================
 VERIFY_TOKEN = "technoglobal123"
@@ -355,18 +363,36 @@ def update_message_history(template_name: str, phone_numbers: List[str]):
     save_message_history(history)
 
 # ==================== WEBHOOK ENDPOINTS ====================
+@app.route("/health")
+def health_check():
+    """Health check endpoint"""
+    return jsonify({
+        "status": "running",
+        "service": "WhatsApp Cloud API",
+        "webhook_url": "/webhook",
+        "verify_token": "technoglobal123"
+    })
+
 @app.route("/webhook", methods=["GET"])
 def verify_webhook():
     """Meta doğrulaması"""
     mode = request.args.get("hub.mode")
     token = request.args.get("hub.verify_token")
     challenge = request.args.get("hub.challenge")
+    
+    logger.info("=" * 60)
+    logger.info("🔍 WEBHOOK DOĞRULAMA İSTEĞİ")
+    logger.info(f"   Mode: {mode}")
+    logger.info(f"   Token (gelen): {token}")
+    logger.info(f"   Token (beklenen): {VERIFY_TOKEN}")
+    logger.info(f"   Challenge: {challenge}")
+    logger.info("=" * 60)
 
     if mode == "subscribe" and token == VERIFY_TOKEN:
-        print("✅ Webhook doğrulandı.")
-        return challenge, 200
+        logger.info("✅ Webhook doğrulandı - Challenge döndürülüyor")
+        return str(challenge), 200
     else:
-        print("❌ Doğrulama hatası.")
+        logger.error("❌ Doğrulama HATASI - Token eşleşmedi!")
         return "Verification failed", 403
 
 @app.route("/webhook", methods=["POST"])
@@ -391,7 +417,7 @@ def receive_webhook():
             log_entry["message_id"] = status["id"]
             log_entry["recipient"] = status.get("recipient_id", "unknown")
             
-            print(f"📦 Mesaj durumu: {status['status']} → {status['id']}")
+            logger.info(f"📦 Mesaj durumu: {status['status']} → {status['id']}")
         
         # Gelen mesaj
         elif "messages" in value:
@@ -414,12 +440,12 @@ def receive_webhook():
             else:
                 log_entry["text"] = f"({msg['type']})"
             
-            print(f"💬 Gelen mesaj: {msg['from']} - {msg['type']}")
+            logger.info(f"💬 Gelen mesaj: {msg['from']} - {msg['type']}")
         
         save_webhook_log(log_entry)
         
     except Exception as e:
-        print(f"⚠️ Webhook parsing hatası: {e}")
+        logger.error(f"⚠️ Webhook parsing hatası: {e}")
         log_entry["error"] = str(e)
         save_webhook_log(log_entry)
     
@@ -1207,9 +1233,20 @@ if __name__ == "__main__":
     print(f"📂 İşlenen dosyası: {PROCESSED_FILE}")
     print(f"📂 Webhook log dosyası: {WEBHOOK_LOG_FILE}")
     print("=" * 60)
-    print("🌐 Dashboard: http://localhost:5005")
-    print("🔗 Webhook URL: https://vina-supermasculine-afterwards.ngrok-free.dev/webhook")
-    print("💡 Ngrok: ngrok http 5005")
+    
+    # Railway/Production için PORT environment variable
+    port = int(os.environ.get("PORT", 5005))
+    
+    if port != 5005:
+        # Production (Railway)
+        print(f"🚀 Production Mode - Port: {port}")
+        print("🔗 Webhook URL: https://biatechapp-production.up.railway.app/webhook")
+    else:
+        # Local development
+        print("🌐 Dashboard: http://localhost:5005")
+        print("🔗 Webhook URL: https://vina-supermasculine-afterwards.ngrok-free.dev/webhook")
+        print("💡 Ngrok: ngrok http 5005")
+    
     print("=" * 60)
     
-    app.run(host="0.0.0.0", port=5005, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=(port == 5005))
