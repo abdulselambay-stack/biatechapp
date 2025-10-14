@@ -10,8 +10,16 @@
         
         <!-- Chat List -->
         <div class="lg:col-span-1 bg-white rounded-2xl shadow-lg border border-gray-100 flex flex-col overflow-hidden">
-            <!-- Search -->
-            <div class="p-4 border-b border-gray-200">
+            <!-- Search & New Chat -->
+            <div class="p-4 border-b border-gray-200 space-y-3">
+                <button @click="openNewChat()" 
+                        class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl font-medium transition-all shadow-lg hover:shadow-xl">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                    Yeni Sohbet Başlat
+                </button>
+                
                 <div class="relative">
                     <input type="text" 
                            x-model="searchQuery"
@@ -61,7 +69,7 @@
                 <div class="flex flex-col h-full">
                     <!-- Chat Header -->
                     <div class="p-4 border-b border-gray-200 bg-gray-50">
-                        <div class="flex items-center justify-between">
+                        <div class="flex items-center justify-between mb-3">
                             <div class="flex items-center gap-3">
                                 <div class="w-10 h-10 rounded-full bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center text-white font-bold">
                                     <span x-text="selectedChat?.name?.charAt(0).toUpperCase() || 'U'"></span>
@@ -71,10 +79,32 @@
                                     <p class="text-sm text-gray-500" x-text="selectedPhone"></p>
                                 </div>
                             </div>
-                            <button class="p-2 hover:bg-gray-200 rounded-lg transition-colors">
-                                <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path>
+                            <button @click="showSendOptions = !showSendOptions" 
+                                    class="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
                                 </svg>
+                                Mesaj Gönder
+                            </button>
+                        </div>
+                        
+                        <!-- Send Options -->
+                        <div x-show="showSendOptions" 
+                             x-transition
+                             class="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-gray-200">
+                            <button @click="sendQuickMessage()" 
+                                    class="flex items-center gap-2 px-3 py-2 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg text-sm transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                                </svg>
+                                Text Mesaj
+                            </button>
+                            <button @click="openTemplateSend()" 
+                                    class="flex items-center gap-2 px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg text-sm transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                                Template
                             </button>
                         </div>
                     </div>
@@ -142,6 +172,119 @@
             </template>
         </div>
     </div>
+
+    <!-- New Chat Modal (Contact Select) -->
+    <div x-show="showNewChatModal" 
+         x-cloak
+         @click.self="showNewChatModal = false"
+         class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+         x-transition>
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 max-h-[80vh] overflow-hidden flex flex-col" @click.stop>
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-xl font-bold text-gray-900">Kişi Seç</h3>
+                <button @click="showNewChatModal = false" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Search Contacts -->
+            <div class="relative mb-4">
+                <input type="text" x-model="contactSearchQuery" @input="filterContacts()"
+                       placeholder="Kişi ara..."
+                       class="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500">
+                <svg class="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+            </div>
+
+            <!-- Contacts List -->
+            <div class="flex-1 overflow-y-auto space-y-2">
+                <template x-for="contact in filteredContacts" :key="contact.phone">
+                    <button @click="selectContactAndClose(contact)" 
+                            class="w-full flex items-center gap-3 p-3 hover:bg-gray-50 rounded-xl transition-colors text-left">
+                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white font-bold">
+                            <span x-text="contact.name.charAt(0).toUpperCase()"></span>
+                        </div>
+                        <div class="flex-1">
+                            <p class="font-medium text-gray-900" x-text="contact.name"></p>
+                            <p class="text-sm text-gray-500" x-text="contact.phone"></p>
+                        </div>
+                    </button>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <!-- Template Send Modal -->
+    <div x-show="showTemplateModal" 
+         x-cloak
+         @click.self="showTemplateModal = false"
+         class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+         x-transition>
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" @click.stop>
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold text-gray-900">Template Gönder</h3>
+                <button @click="showTemplateModal = false" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <form @submit.prevent="sendTemplate()" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Template Seç</label>
+                    <select x-model="selectedTemplate" required
+                            class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
+                        <option value="">Seçiniz...</option>
+                        <option value="sablon_1">Şablon 1</option>
+                        <option value="sablon_2">Şablon 2</option>
+                        <option value="sablon_3">Şablon 3</option>
+                        <option value="sablon_6">Şablon 6</option>
+                    </select>
+                </div>
+
+                <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                    <p class="text-sm text-blue-700">
+                        <strong x-text="selectedChat?.name || selectedPhone"></strong> numarasına template gönderilecek
+                    </p>
+                </div>
+
+                <div class="flex gap-3">
+                    <button type="button" @click="showTemplateModal = false"
+                            class="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-medium">
+                        İptal
+                    </button>
+                    <button type="submit"
+                            class="flex-1 px-4 py-3 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white rounded-xl font-medium">
+                        Gönder
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Stats Bar -->
+    <div class="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-white rounded-xl shadow p-4 border border-gray-100">
+            <p class="text-sm text-gray-500 mb-1">Toplam Sohbet</p>
+            <p class="text-2xl font-bold text-blue-600" x-text="stats.total_chats">0</p>
+        </div>
+        <div class="bg-white rounded-xl shadow p-4 border border-gray-100">
+            <p class="text-sm text-gray-500 mb-1">Gönderilen</p>
+            <p class="text-2xl font-bold text-green-600" x-text="stats.total_sent">0</p>
+        </div>
+        <div class="bg-white rounded-xl shadow p-4 border border-gray-100">
+            <p class="text-sm text-gray-500 mb-1">Alınan</p>
+            <p class="text-2xl font-bold text-purple-600" x-text="stats.total_received">0</p>
+        </div>
+        <div class="bg-white rounded-xl shadow p-4 border border-gray-100">
+            <p class="text-sm text-gray-500 mb-1">Bugün</p>
+            <p class="text-2xl font-bold text-amber-600" x-text="stats.today">0</p>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -151,14 +294,29 @@ function chat() {
     return {
         chats: [],
         filteredChats: [],
+        contacts: [],
+        filteredContacts: [],
         searchQuery: '',
+        contactSearchQuery: '',
         selectedPhone: null,
         selectedChat: null,
         messages: [],
         newMessage: '',
+        showNewChatModal: false,
+        showTemplateModal: false,
+        showSendOptions: false,
+        selectedTemplate: '',
+        stats: {
+            total_chats: 0,
+            total_sent: 0,
+            total_received: 0,
+            today: 0
+        },
         
         init() {
             this.loadChats();
+            this.loadContacts();
+            this.loadStats();
             setInterval(() => this.refreshMessages(), 5000); // Auto refresh every 5s
         },
         
@@ -183,6 +341,117 @@ function chat() {
                 c.name?.toLowerCase().includes(query) || 
                 c.phone.includes(query)
             );
+        },
+        
+        async loadContacts() {
+            try {
+                const response = await fetch('/api/contacts-mongo');
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.contacts = data.contacts;
+                    this.filteredContacts = this.contacts;
+                }
+            } catch (error) {
+                console.error('Contacts yükleme hatası:', error);
+            }
+        },
+        
+        filterContacts() {
+            const query = this.contactSearchQuery.toLowerCase();
+            this.filteredContacts = this.contacts.filter(c => 
+                c.name.toLowerCase().includes(query) || 
+                c.phone.includes(query)
+            );
+        },
+        
+        async loadStats() {
+            try {
+                // Chats'ten istatistik hesapla
+                this.stats.total_chats = this.chats.length;
+                
+                // API'den message stats çek
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                
+                this.stats.total_sent = data.sent || 0;
+                this.stats.total_received = this.chats.reduce((sum, chat) => 
+                    sum + (chat.messages?.filter(m => m.direction === 'incoming').length || 0), 0
+                );
+                
+                // Bugünkü mesajlar
+                const today = new Date().toISOString().split('T')[0];
+                this.stats.today = this.chats.reduce((sum, chat) => {
+                    if (chat.last_message_time?.startsWith(today)) return sum + 1;
+                    return sum;
+                }, 0);
+            } catch (error) {
+                console.error('Stats yükleme hatası:', error);
+            }
+        },
+        
+        openNewChat() {
+            this.showNewChatModal = true;
+            this.contactSearchQuery = '';
+            this.filterContacts();
+        },
+        
+        selectContactAndClose(contact) {
+            this.selectedPhone = contact.phone;
+            this.selectedChat = {
+                phone: contact.phone,
+                name: contact.name,
+                last_message: '',
+                last_message_time: new Date().toISOString()
+            };
+            this.showNewChatModal = false;
+            this.messages = [];
+            this.loadMessages();
+        },
+        
+        sendQuickMessage() {
+            this.showSendOptions = false;
+            // Input'a focus yap
+            setTimeout(() => {
+                document.querySelector('textarea[x-model="newMessage"]')?.focus();
+            }, 100);
+        },
+        
+        openTemplateSend() {
+            this.showSendOptions = false;
+            this.showTemplateModal = true;
+            this.selectedTemplate = '';
+        },
+        
+        async sendTemplate() {
+            if (!this.selectedTemplate) {
+                alert('Lütfen bir template seçin');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        phone_numbers: [this.selectedPhone],
+                        template_name: this.selectedTemplate
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(`✅ Template gönderildi!`);
+                    this.showTemplateModal = false;
+                    this.loadMessages();
+                    this.loadStats();
+                } else {
+                    alert('❌ Template gönderilemedi: ' + (data.error || 'Bilinmeyen hata'));
+                }
+            } catch (error) {
+                alert('❌ Hata: ' + error.message);
+            }
         },
         
         async selectChat(chatItem) {
@@ -241,8 +510,9 @@ function chat() {
                     
                     this.$nextTick(() => this.scrollToBottom());
                     
-                    // Chat listesini güncelle
+                    // Chat listesini ve istatistikleri güncelle
                     this.loadChats();
+                    this.loadStats();
                 } else {
                     alert('❌ Mesaj gönderilemedi: ' + data.error);
                     this.newMessage = messageText; // Geri koy
