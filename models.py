@@ -283,10 +283,12 @@ class ChatModel:
             "message_type": message_type,  # "text", "image", "video", etc
             "content": content,
             "media_url": media_url,
+            "is_read": direction == "outgoing",  # Giden mesajlar otomatik okunmuş
             "timestamp": datetime.utcnow()
         }
         
-        ChatModel.get_collection().insert_one(message)
+        result = ChatModel.get_collection().insert_one(message)
+        return result.inserted_id
     
     @staticmethod
     def get_chat_history(phone: str, limit: int = 100) -> List[Dict]:
@@ -311,7 +313,19 @@ class ChatModel:
                 "_id": "$phone",
                 "last_message": {"$first": "$content"},
                 "last_message_time": {"$first": "$timestamp"},
-                "message_count": {"$sum": 1}
+                "message_count": {"$sum": 1},
+                "unread_count": {
+                    "$sum": {
+                        "$cond": [
+                            {"$and": [
+                                {"$eq": ["$direction", "incoming"]},
+                                {"$eq": ["$is_read", False]}
+                            ]},
+                            1,
+                            0
+                        ]
+                    }
+                }
             }},
             {"$sort": {"last_message_time": -1}}
         ]
@@ -323,6 +337,36 @@ class ChatModel:
             chat['last_message_time'] = chat['last_message_time'].isoformat()
         
         return chats
+    
+    @staticmethod
+    def mark_messages_as_read(phone: str):
+        """Bir telefon numarasının tüm okunmamış mesajlarını okundu olarak işaretle"""
+        ChatModel.get_collection().update_many(
+            {
+                "phone": phone,
+                "direction": "incoming",
+                "is_read": False
+            },
+            {"$set": {"is_read": True}}
+        )
+    
+    @staticmethod
+    def get_unread_count(phone: str = None) -> int:
+        """Okunmamış mesaj sayısını getir"""
+        query = {
+            "direction": "incoming",
+            "is_read": False
+        }
+        
+        if phone:
+            query["phone"] = phone
+        
+        return ChatModel.get_collection().count_documents(query)
+    
+    @staticmethod
+    def get_total_unread_count() -> int:
+        """Toplam okunmamış mesaj sayısı"""
+        return ChatModel.get_unread_count()
 
 class SalesModel:
     """Satış Takip Sistemi"""

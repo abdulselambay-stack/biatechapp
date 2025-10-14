@@ -25,26 +25,26 @@
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg p-6 text-white">
             <p class="text-blue-100 text-sm font-medium mb-2">Toplam Mesaj</p>
-            <p class="text-4xl font-bold mb-2">1,245</p>
-            <p class="text-blue-100 text-sm">+12.5% bu ay</p>
+            <p class="text-4xl font-bold mb-2" x-text="stats.total_messages">0</p>
+            <p class="text-blue-100 text-sm">Seçili dönem</p>
         </div>
         
         <div class="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl shadow-lg p-6 text-white">
             <p class="text-green-100 text-sm font-medium mb-2">Başarı Oranı</p>
-            <p class="text-4xl font-bold mb-2">98.2%</p>
-            <p class="text-green-100 text-sm">+2.1% geçen haftaya göre</p>
+            <p class="text-4xl font-bold mb-2" x-text="stats.success_rate + '%'">0%</p>
+            <p class="text-green-100 text-sm">Teslim edilen mesajlar</p>
         </div>
         
         <div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl shadow-lg p-6 text-white">
             <p class="text-purple-100 text-sm font-medium mb-2">Okunma Oranı</p>
-            <p class="text-4xl font-bold mb-2">87.5%</p>
-            <p class="text-purple-100 text-sm">+5.3% bu ay</p>
+            <p class="text-4xl font-bold mb-2" x-text="stats.read_rate + '%'">0%</p>
+            <p class="text-green-100 text-sm">Okunan mesajlar</p>
         </div>
         
         <div class="bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl shadow-lg p-6 text-white">
-            <p class="text-amber-100 text-sm font-medium mb-2">Aktif Kullanıcı</p>
-            <p class="text-4xl font-bold mb-2">9,249</p>
-            <p class="text-amber-100 text-sm">Toplam kişi</p>
+            <p class="text-amber-100 text-sm font-medium mb-2">Toplam Kişi</p>
+            <p class="text-4xl font-bold mb-2" x-text="stats.total_contacts">0</p>
+            <p class="text-amber-100 text-sm">Kayıtlı kişiler</p>
         </div>
     </div>
 
@@ -58,7 +58,7 @@
                 <div>
                     <div class="flex items-center justify-between mb-2">
                         <span class="text-sm font-medium text-gray-700">Gönderildi</span>
-                        <span class="text-sm font-bold text-green-600">1,245 (100%)</span>
+                        <span class="text-sm font-bold text-green-600" x-text="`${stats.sent_messages} (100%)`">0 (100%)</span>
                     </div>
                     <div class="w-full bg-gray-200 rounded-full h-3">
                         <div class="bg-gradient-to-r from-green-500 to-emerald-500 h-3 rounded-full" style="width: 100%"></div>
@@ -68,30 +68,30 @@
                 <div>
                     <div class="flex items-center justify-between mb-2">
                         <span class="text-sm font-medium text-gray-700">Teslim Edildi</span>
-                        <span class="text-sm font-bold text-blue-600">1,223 (98.2%)</span>
+                        <span class="text-sm font-bold text-blue-600" x-text="`${stats.delivered_messages} (${stats.success_rate}%)`">0 (0%)</span>
                     </div>
                     <div class="w-full bg-gray-200 rounded-full h-3">
-                        <div class="bg-gradient-to-r from-blue-500 to-indigo-500 h-3 rounded-full" style="width: 98.2%"></div>
+                        <div class="bg-gradient-to-r from-blue-500 to-indigo-500 h-3 rounded-full" :style="`width: ${stats.success_rate}%`"></div>
                     </div>
                 </div>
                 
                 <div>
                     <div class="flex items-center justify-between mb-2">
                         <span class="text-sm font-medium text-gray-700">Okundu</span>
-                        <span class="text-sm font-bold text-purple-600">1,090 (87.5%)</span>
+                        <span class="text-sm font-bold text-purple-600" x-text="`${stats.read_messages} (${stats.read_rate}%)`">0 (0%)</span>
                     </div>
                     <div class="w-full bg-gray-200 rounded-full h-3">
-                        <div class="bg-gradient-to-r from-purple-500 to-pink-500 h-3 rounded-full" style="width: 87.5%"></div>
+                        <div class="bg-gradient-to-r from-purple-500 to-pink-500 h-3 rounded-full" :style="`width: ${stats.read_rate}%`"></div>
                     </div>
                 </div>
                 
                 <div>
                     <div class="flex items-center justify-between mb-2">
                         <span class="text-sm font-medium text-gray-700">Hata</span>
-                        <span class="text-sm font-bold text-red-600">22 (1.8%)</span>
+                        <span class="text-sm font-bold text-red-600" x-text="`${stats.failed_messages} (${((stats.failed_messages / stats.total_messages) * 100).toFixed(1)}%)`">0 (0%)</span>
                     </div>
                     <div class="w-full bg-gray-200 rounded-full h-3">
-                        <div class="bg-gradient-to-r from-red-500 to-orange-500 h-3 rounded-full" style="width: 1.8%"></div>
+                        <div class="bg-gradient-to-r from-red-500 to-orange-500 h-3 rounded-full" :style="`width: ${((stats.failed_messages / stats.total_messages) * 100).toFixed(1)}%`"></div>
                     </div>
                 </div>
             </div>
@@ -168,18 +168,41 @@
 function analytics() {
     return {
         timeRange: '7d',
-        activities: [
-            { type: 'success', message: 'Kampanya "Ocak Ayı" tamamlandı - 147/150 başarılı', time: '2 saat önce' },
-            { type: 'info', message: '25 yeni kişi eklendi', time: '5 saat önce' },
-            { type: 'success', message: 'Toplu gönderim başlatıldı - 150 kişi', time: 'Dün, 14:30' },
-            { type: 'error', message: '3 mesaj gönderilemedi - hata detayları', time: 'Dün, 14:25' }
-        ],
+        stats: {
+            total_messages: 0,
+            sent_messages: 0,
+            delivered_messages: 0,
+            read_messages: 0,
+            failed_messages: 0,
+            success_rate: 0,
+            read_rate: 0,
+            total_contacts: 0
+        },
+        activities: [],
         
         init() {
+            this.loadStats();
+            
             this.$watch('timeRange', () => {
                 console.log('Time range changed:', this.timeRange);
-                // API'den yeni veriler çekilecek
+                this.loadStats();
             });
+        },
+        
+        async loadStats() {
+            try {
+                const response = await fetch(`/api/analytics/stats?range=${this.timeRange}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.stats = data.stats;
+                    console.log('✅ Analytics stats loaded:', this.stats);
+                } else {
+                    console.error('❌ Stats yükleme hatası:', data.error);
+                }
+            } catch (error) {
+                console.error('❌ API hatası:', error);
+            }
         }
     }
 }

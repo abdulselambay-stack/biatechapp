@@ -1592,12 +1592,45 @@ def api_get_chat_history(phone):
         limit = int(request.args.get("limit", 100))
         messages = ChatModel.get_chat_history(phone, limit=limit)
         
+        # Mesajları okundu olarak işaretle
+        ChatModel.mark_messages_as_read(phone)
+        
         return jsonify({
             "success": True,
             "messages": messages
         })
     except Exception as e:
         logger.error(f"Get chat history error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/chat/mark-read/<phone>", methods=["POST"])
+@login_required
+def api_mark_chat_as_read(phone):
+    """Bir chat'in mesajlarını okundu olarak işaretle"""
+    try:
+        ChatModel.mark_messages_as_read(phone)
+        
+        return jsonify({
+            "success": True,
+            "message": "Mesajlar okundu olarak işaretlendi"
+        })
+    except Exception as e:
+        logger.error(f"Mark as read error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/chat/unread-count", methods=["GET"])
+@login_required
+def api_get_unread_count():
+    """Toplam okunmamış mesaj sayısı"""
+    try:
+        unread_count = ChatModel.get_total_unread_count()
+        
+        return jsonify({
+            "success": True,
+            "unread_count": unread_count
+        })
+    except Exception as e:
+        logger.error(f"Get unread count error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route("/api/chat/send", methods=["POST"])
@@ -1774,6 +1807,141 @@ def api_delete_sale(sale_id):
         })
     except Exception as e:
         logger.error(f"Delete sale error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# ==================== ANALYTICS & DASHBOARD API ====================
+
+@app.route("/api/analytics/stats", methods=["GET"])
+@login_required
+def api_analytics_stats():
+    """Analytics sayfası için gerçek istatistikler"""
+    try:
+        from datetime import datetime, timedelta
+        
+        # Zaman aralığı
+        time_range = request.args.get('range', '7d')
+        now = datetime.utcnow()
+        
+        if time_range == '7d':
+            start_date = now - timedelta(days=7)
+        elif time_range == '30d':
+            start_date = now - timedelta(days=30)
+        elif time_range == '90d':
+            start_date = now - timedelta(days=90)
+        else:  # all
+            start_date = datetime(2020, 1, 1)
+        
+        # Mesaj istatistikleri
+        messages_pipeline = [
+            {"$match": {"created_at": {"$gte": start_date}}},
+            {"$group": {
+                "_id": "$status",
+                "count": {"$sum": 1}
+            }}
+        ]
+        
+        message_stats = list(MessageModel.get_collection().aggregate(messages_pipeline))
+        stats_dict = {item['_id']: item['count'] for item in message_stats}
+        
+        total_messages = sum(stats_dict.values())
+        sent_messages = stats_dict.get('sent', 0) + stats_dict.get('delivered', 0) + stats_dict.get('read', 0)
+        delivered_messages = stats_dict.get('delivered', 0) + stats_dict.get('read', 0)
+        read_messages = stats_dict.get('read', 0)
+        failed_messages = stats_dict.get('failed', 0)
+        
+        # Toplam kişi sayısı
+        total_contacts = ContactModel.get_collection().count_documents({})
+        
+        # Başarı oranları
+        success_rate = round((delivered_messages / total_messages * 100), 1) if total_messages > 0 else 0
+        read_rate = round((read_messages / total_messages * 100), 1) if total_messages > 0 else 0
+        
+        return jsonify({
+            "success": True,
+            "stats": {
+                "total_messages": total_messages,
+                "sent_messages": sent_messages,
+                "delivered_messages": delivered_messages,
+                "read_messages": read_messages,
+                "failed_messages": failed_messages,
+                "success_rate": success_rate,
+                "read_rate": read_rate,
+                "total_contacts": total_contacts
+            }
+        })
+    except Exception as e:
+        logger.error(f"Analytics stats error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/dashboard/stats", methods=["GET"])
+@login_required
+def api_dashboard_stats():
+    """Dashboard için gerçek istatistikler"""
+    try:
+        from datetime import datetime, timedelta
+        
+        now = datetime.utcnow()
+        today_start = datetime(now.year, now.month, now.day)
+        week_start = now - timedelta(days=7)
+        
+        # Toplam mesajlar
+        total_messages = MessageModel.get_collection().count_documents({})
+        
+        # Bugün gönderilen mesajlar
+        today_messages = MessageModel.get_collection().count_documents({
+            "created_at": {"$gte": today_start}
+        })
+        
+        # Toplam kişiler
+        total_contacts = ContactModel.get_collection().count_documents({})
+        
+        # Aktif kampanyalar
+        active_campaigns = CampaignModel.get_collection().count_documents({
+            "status": {"$in": ["running", "pending"]}
+        })
+        
+        # Bu hafta gönderilen mesajlar
+        week_messages = MessageModel.get_collection().count_documents({
+            "created_at": {"$gte": week_start}
+        })
+        
+        # Başarılı mesajlar
+        successful_messages = MessageModel.get_collection().count_documents({
+            "status": {"$in": ["delivered", "read"]}
+        })
+        
+        # Başarı oranı
+        success_rate = round((successful_messages / total_messages * 100), 1) if total_messages > 0 else 0
+        
+        # Okunmamış mesajlar
+        unread_messages = ChatModel.get_total_unread_count()
+        
+        # Son kampanyalar
+        recent_campaigns = list(CampaignModel.get_collection()
+                               .find()
+                               .sort("created_at", -1)
+                               .limit(5))
+        
+        for campaign in recent_campaigns:
+            campaign['_id'] = str(campaign['_id'])
+            if campaign.get('created_at'):
+                campaign['created_at'] = campaign['created_at'].isoformat()
+        
+        return jsonify({
+            "success": True,
+            "stats": {
+                "total_messages": total_messages,
+                "today_messages": today_messages,
+                "week_messages": week_messages,
+                "total_contacts": total_contacts,
+                "active_campaigns": active_campaigns,
+                "success_rate": success_rate,
+                "unread_messages": unread_messages,
+                "recent_campaigns": recent_campaigns
+            }
+        })
+    except Exception as e:
+        logger.error(f"Dashboard stats error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 # ==================== TEMPLATE API ====================
