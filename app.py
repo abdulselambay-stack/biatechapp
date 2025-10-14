@@ -12,7 +12,7 @@ from typing import List, Dict, Set
 
 # MongoDB imports
 from database import get_database
-from models import ContactModel, MessageModel, CampaignModel, WebhookLogModel, ChatModel, SalesModel, AdminModel
+from models import ContactModel, MessageModel, CampaignModel, WebhookLogModel, ChatModel, SalesModel, AdminModel, ProductModel
 
 # .env dosyasını manuel yükle
 def load_env_file():
@@ -629,6 +629,12 @@ def chat_page():
 def sales_page():
     """Satışlar sayfası"""
     return render_template("sales.html")
+
+@app.route("/products")
+@login_required
+def products_page():
+    """Ürünler sayfası"""
+    return render_template("products.html")
 
 @app.route("/uploads/<filename>")
 def serve_upload(filename):
@@ -1694,6 +1700,133 @@ def api_send_chat_message():
         logger.error(traceback.format_exc())
         return jsonify({"success": False, "error": str(e)}), 500
 
+# ==================== PRODUCTS API ENDPOINTS ====================
+
+@app.route("/api/products", methods=["GET"])
+@login_required
+def api_get_products():
+    """Tüm ürünleri getir"""
+    try:
+        products = ProductModel.get_all_products()
+        
+        return jsonify({
+            "success": True,
+            "products": products,
+            "count": len(products)
+        })
+    except Exception as e:
+        logger.error(f"Get products error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/products", methods=["POST"])
+@login_required
+def api_create_product():
+    """Yeni ürün oluştur"""
+    try:
+        data = request.get_json()
+        
+        name = data.get("name")
+        cost_price = data.get("cost_price")
+        sale_price = data.get("sale_price")
+        description = data.get("description", "")
+        category = data.get("category", "")
+        
+        if not name or cost_price is None or sale_price is None:
+            return jsonify({"success": False, "error": "Ürün adı, geliş ve satış fiyatı gerekli"}), 400
+        
+        product = ProductModel.create_product(
+            name=name,
+            cost_price=float(cost_price),
+            sale_price=float(sale_price),
+            description=description,
+            category=category
+        )
+        
+        logger.info(f"✅ Ürün oluşturuldu: {name} - Kar: {product['profit']} TRY")
+        
+        return jsonify({
+            "success": True,
+            "message": "Ürün oluşturuldu",
+            "product": product
+        })
+    except Exception as e:
+        logger.error(f"Create product error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/products/<product_id>", methods=["GET"])
+@login_required
+def api_get_product(product_id):
+    """Ürün detayı getir"""
+    try:
+        product = ProductModel.get_product_by_id(product_id)
+        
+        if not product:
+            return jsonify({"success": False, "error": "Ürün bulunamadı"}), 404
+        
+        return jsonify({
+            "success": True,
+            "product": product
+        })
+    except Exception as e:
+        logger.error(f"Get product error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/products/<product_id>", methods=["PUT"])
+@login_required
+def api_update_product(product_id):
+    """Ürün güncelle"""
+    try:
+        data = request.get_json()
+        
+        name = data.get("name")
+        cost_price = data.get("cost_price")
+        sale_price = data.get("sale_price")
+        description = data.get("description", "")
+        category = data.get("category", "")
+        
+        if not name or cost_price is None or sale_price is None:
+            return jsonify({"success": False, "error": "Ürün adı, geliş ve satış fiyatı gerekli"}), 400
+        
+        success = ProductModel.update_product(
+            product_id=product_id,
+            name=name,
+            cost_price=float(cost_price),
+            sale_price=float(sale_price),
+            description=description,
+            category=category
+        )
+        
+        if success:
+            logger.info(f"✅ Ürün güncellendi: {name}")
+            return jsonify({
+                "success": True,
+                "message": "Ürün güncellendi"
+            })
+        else:
+            return jsonify({"success": False, "error": "Ürün bulunamadı"}), 404
+    except Exception as e:
+        logger.error(f"Update product error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/products/<product_id>", methods=["DELETE"])
+@login_required
+def api_delete_product(product_id):
+    """Ürün sil"""
+    try:
+        success = ProductModel.delete_product(product_id)
+        
+        if success:
+            logger.info(f"✅ Ürün silindi: {product_id}")
+            return jsonify({
+                "success": True,
+                "message": "Ürün silindi"
+            })
+        else:
+            return jsonify({"success": False, "error": "Ürün bulunamadı"}), 404
+    except Exception as e:
+        logger.error(f"Delete product error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
 # ==================== SALES API ENDPOINTS ====================
 
 @app.route("/api/sales", methods=["GET"])
@@ -1745,32 +1878,31 @@ def api_get_customer_sales(phone):
 
 @app.route("/api/sales", methods=["POST"])
 def api_create_sale():
-    """Yeni satış kaydı oluştur"""
+    """Yeni satış kaydı oluştur (ürün bazlı)"""
     try:
         data = request.get_json()
         
         phone = data.get("phone")
         customer_name = data.get("customer_name")
-        amount = data.get("amount")
-        profit = data.get("profit")
+        product_id = data.get("product_id")
+        quantity = data.get("quantity", 1)
         
-        if not all([phone, customer_name, amount, profit]):
+        if not all([phone, customer_name, product_id]):
             return jsonify({
                 "success": False,
-                "error": "phone, customer_name, amount, profit gerekli"
+                "error": "phone, customer_name, product_id gerekli"
             }), 400
         
         sale = SalesModel.create_sale(
             phone=phone,
             customer_name=customer_name,
-            amount=float(amount),
-            profit=float(profit),
-            currency=data.get("currency", "USD"),
-            product=data.get("product", ""),
-            notes=data.get("notes", "")
+            product_id=product_id,
+            quantity=int(quantity),
+            notes=data.get("notes", ""),
+            currency=data.get("currency", "TRY")
         )
         
-        logger.info(f"✅ New sale created: {customer_name} - ${amount} (Profit: ${profit})")
+        logger.info(f"✅ Satış oluşturuldu: {customer_name} - {sale['product_name']} x{quantity} = {sale['total_amount']} TRY (Kar: {sale['total_profit']} TRY)")
         
         return jsonify({
             "success": True,

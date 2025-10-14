@@ -368,6 +368,102 @@ class ChatModel:
         """Toplam okunmamış mesaj sayısı"""
         return ChatModel.get_unread_count()
 
+class ProductModel:
+    """Ürün Yönetimi"""
+    
+    @staticmethod
+    def get_collection() -> Collection:
+        return get_database()['products']
+    
+    @staticmethod
+    def create_product(name: str, cost_price: float, sale_price: float, 
+                       description: str = "", category: str = "") -> Dict:
+        """Yeni ürün oluştur"""
+        profit = float(sale_price) - float(cost_price)
+        profit_margin = (profit / float(sale_price) * 100) if sale_price > 0 else 0
+        
+        product = {
+            "name": name,
+            "cost_price": float(cost_price),  # Geliş fiyatı
+            "sale_price": float(sale_price),  # Satış fiyatı
+            "profit": profit,  # Kar
+            "profit_margin": round(profit_margin, 2),  # Kar marjı %
+            "description": description,
+            "category": category,
+            "is_active": True,
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        }
+        
+        result = ProductModel.get_collection().insert_one(product)
+        product['_id'] = str(result.inserted_id)
+        return product
+    
+    @staticmethod
+    def get_all_products(active_only: bool = True) -> List[Dict]:
+        """Tüm ürünleri getir"""
+        query = {"is_active": True} if active_only else {}
+        products = list(ProductModel.get_collection()
+                       .find(query)
+                       .sort("name", 1))
+        
+        for product in products:
+            product['_id'] = str(product['_id'])
+            product['created_at'] = product['created_at'].isoformat()
+            product['updated_at'] = product['updated_at'].isoformat()
+        
+        return products
+    
+    @staticmethod
+    def get_product_by_id(product_id: str) -> Dict:
+        """Ürün ID'ye göre getir"""
+        from bson import ObjectId
+        product = ProductModel.get_collection().find_one({"_id": ObjectId(product_id)})
+        
+        if product:
+            product['_id'] = str(product['_id'])
+            product['created_at'] = product['created_at'].isoformat()
+            product['updated_at'] = product['updated_at'].isoformat()
+        
+        return product
+    
+    @staticmethod
+    def update_product(product_id: str, name: str, cost_price: float, 
+                       sale_price: float, description: str = "", 
+                       category: str = "") -> bool:
+        """Ürün güncelle"""
+        from bson import ObjectId
+        
+        profit = float(sale_price) - float(cost_price)
+        profit_margin = (profit / float(sale_price) * 100) if sale_price > 0 else 0
+        
+        result = ProductModel.get_collection().update_one(
+            {"_id": ObjectId(product_id)},
+            {"$set": {
+                "name": name,
+                "cost_price": float(cost_price),
+                "sale_price": float(sale_price),
+                "profit": profit,
+                "profit_margin": round(profit_margin, 2),
+                "description": description,
+                "category": category,
+                "updated_at": datetime.utcnow()
+            }}
+        )
+        
+        return result.modified_count > 0
+    
+    @staticmethod
+    def delete_product(product_id: str) -> bool:
+        """Ürünü sil (soft delete)"""
+        from bson import ObjectId
+        result = ProductModel.get_collection().update_one(
+            {"_id": ObjectId(product_id)},
+            {"$set": {"is_active": False, "updated_at": datetime.utcnow()}}
+        )
+        return result.modified_count > 0
+
+
 class SalesModel:
     """Satış Takip Sistemi"""
     
@@ -376,16 +472,35 @@ class SalesModel:
         return get_database()['sales']
     
     @staticmethod
-    def create_sale(phone: str, customer_name: str, amount: float, profit: float, 
-                    currency: str = "USD", product: str = "", notes: str = "") -> Dict:
-        """Yeni satış kaydı oluştur"""
+    def create_sale(phone: str, customer_name: str, product_id: str, 
+                    quantity: int = 1, notes: str = "", currency: str = "TRY") -> Dict:
+        """Yeni satış kaydı oluştur (ürün bazlı)"""
+        from bson import ObjectId
+        
+        # Ürün bilgisini çek
+        product = ProductModel.get_product_by_id(product_id)
+        
+        if not product:
+            raise ValueError("Ürün bulunamadı")
+        
+        # Hesaplamalar
+        total_cost = product['cost_price'] * quantity
+        total_sale = product['sale_price'] * quantity
+        total_profit = total_sale - total_cost
+        
         sale = {
             "phone": phone,
             "customer_name": customer_name,
-            "amount": float(amount),  # Toplam satış tutarı
-            "profit": float(profit),   # Kar
+            "product_id": product_id,
+            "product_name": product['name'],
+            "quantity": quantity,
+            "unit_cost_price": product['cost_price'],
+            "unit_sale_price": product['sale_price'],
+            "total_cost": round(total_cost, 2),
+            "total_amount": round(total_sale, 2),  # Toplam satış tutarı
+            "total_profit": round(total_profit, 2),   # Kar
+            "profit_margin": product['profit_margin'],
             "currency": currency,
-            "product": product,
             "notes": notes,
             "sale_date": datetime.utcnow(),
             "created_at": datetime.utcnow(),
