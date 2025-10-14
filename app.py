@@ -236,16 +236,36 @@ def send_text_message(phone_number: str, text: str) -> Dict:
     }
     
     try:
+        logger.info(f"🚀 Sending text to {phone_number}")
         response = requests.post(WHATSAPP_API_URL, headers=headers, json=payload, timeout=10)
-        return {
-            "success": response.status_code == 200,
-            "status_code": response.status_code,
-            "response": response.json()
-        }
-    except Exception as e:
+        response_data = response.json()
+        
+        if response.status_code == 200:
+            logger.info(f"✅ Message sent successfully: {response_data}")
+            return {
+                "success": True,
+                "status_code": response.status_code,
+                "response": response_data
+            }
+        else:
+            logger.error(f"❌ WhatsApp API error {response.status_code}: {response_data}")
+            return {
+                "success": False,
+                "status_code": response.status_code,
+                "response": response_data,
+                "error": response_data.get("error", {}).get("message", "Unknown error")
+            }
+    except requests.exceptions.RequestException as e:
+        logger.error(f"❌ Request error: {e}")
         return {
             "success": False,
-            "error": str(e)
+            "error": f"Network error: {str(e)}"
+        }
+    except Exception as e:
+        logger.error(f"❌ Unexpected error: {e}")
+        return {
+            "success": False,
+            "error": f"Error: {str(e)}"
         }
 
 def send_image_message(phone_number: str, image_url: str, caption: str = "") -> Dict:
@@ -1529,8 +1549,12 @@ def api_send_chat_message():
         if not phone or not message:
             return jsonify({"success": False, "error": "Phone ve message gerekli"}), 400
         
+        logger.info(f"📤 Sending chat message to {phone}: {message[:50]}")
+        
         # WhatsApp API'ye mesaj gönder
         result = send_text_message(phone, message)
+        
+        logger.info(f"📬 WhatsApp API response: {result}")
         
         if result.get("success"):
             # MongoDB'ye kaydet
@@ -1557,16 +1581,22 @@ def api_send_chat_message():
             
             return jsonify({
                 "success": True,
-                "message": "Mesaj gönderildi"
+                "message": "Mesaj gönderildi",
+                "message_id": message_id
             })
         else:
+            error_detail = result.get("error") or result.get("response", {})
+            logger.error(f"❌ Message send failed: {error_detail}")
+            
             return jsonify({
                 "success": False,
-                "error": result.get("error", "Mesaj gönderilemedi")
+                "error": f"WhatsApp API hatası: {error_detail}"
             }), 400
             
     except Exception as e:
-        logger.error(f"Send chat message error: {e}")
+        logger.error(f"❌ Send chat message error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return jsonify({"success": False, "error": str(e)}), 500
 
 # Only run Flask dev server when executed directly (not with gunicorn)
