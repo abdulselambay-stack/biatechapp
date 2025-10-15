@@ -12,7 +12,7 @@ from typing import List, Dict, Set
 
 # MongoDB imports
 from database import get_database
-from models import ContactModel, MessageModel, SalesModel, ProductModel, TemplateSettingsModel, ChatModel, AdminModel
+from models import ContactModel, MessageModel, SalesModel, ProductModel, TemplateSettingsModel, ChatModel, AdminModel, WebhookLogModel
 
 # .env dosyasını manuel yükle
 def load_env_file():
@@ -436,6 +436,21 @@ def health_check():
         "service": "WhatsApp Cloud API",
         "webhook_url": "/webhook",
         "verify_token": "technoglobal123"
+    })
+
+@app.route("/webhook/test")
+def webhook_test():
+    """Webhook test endpoint - Meta ayarlarını kontrol et"""
+    return jsonify({
+        "webhook_url": "https://your-app.railway.app/webhook",
+        "verify_token": VERIFY_TOKEN,
+        "instructions": {
+            "step_1": "Meta Business Manager > WhatsApp > Configuration",
+            "step_2": "Webhook URL: https://your-app.railway.app/webhook",
+            "step_3": f"Verify Token: {VERIFY_TOKEN}",
+            "step_4": "Subscribe to: messages, message_status"
+        },
+        "test": "Send a message to your WhatsApp number to test"
     })
 
 @app.route("/webhook", methods=["GET"])

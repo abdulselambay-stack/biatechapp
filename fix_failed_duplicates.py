@@ -5,15 +5,34 @@ Başarısız mesajların sent_templates listesinden çıkarılması
 - Böylece tekrar gönderilebilir hale gelir
 """
 
+import os
+import logging
+
+# .env dosyasını manuel yükle
+def load_env_file():
+    env_path = os.path.join(os.path.dirname(__file__), '.env')
+    if os.path.exists(env_path):
+        with open(env_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    os.environ[key.strip()] = value.strip()
+        return True
+    return False
+
+# .env'yi yükle
+if not load_env_file():
+    print("⚠️  .env dosyası bulunamadı!")
+
 from database import get_database
 from models import ContactModel, MessageModel
-import logging
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 def fix_failed_duplicates():
-    """Başarısız mesajları sent_templates'den çıkar"""
+    """Başarısız mesajları sent_templates'den çıkar - BATCH UPDATE"""
     
     db = get_database()
     messages_collection = MessageModel.get_collection()
@@ -22,12 +41,12 @@ def fix_failed_duplicates():
     # Tüm başarısız mesajları bul
     failed_messages = list(messages_collection.find({
         "status": "failed"
-    }))
+    }, {"phone": 1, "template_name": 1}))  # Sadece gerekli alanları çek
     
     logger.info(f"📊 Toplam {len(failed_messages)} başarısız mesaj bulundu")
     
-    fixed_count = 0
-    
+    # Phone ve template_name ikililerini topla
+    phone_template_pairs = {}
     for msg in failed_messages:
         phone = msg.get("phone")
         template_name = msg.get("template_name")
@@ -35,25 +54,35 @@ def fix_failed_duplicates():
         if not phone or not template_name:
             continue
         
-        # Contact'ı bul
-        contact = contacts_collection.find_one({"phone": phone})
-        
-        if not contact:
-            logger.warning(f"⚠️  Contact bulunamadı: {phone}")
-            continue
-        
-        sent_templates = contact.get("sent_templates", [])
-        
-        # Template sent_templates'de varsa çıkar
-        if template_name in sent_templates:
-            contacts_collection.update_one(
-                {"phone": phone},
-                {"$pull": {"sent_templates": template_name}}
-            )
-            fixed_count += 1
-            logger.info(f"✅ Fixed: {phone} - {template_name} removed from sent_templates")
+        if phone not in phone_template_pairs:
+            phone_template_pairs[phone] = set()
+        phone_template_pairs[phone].add(template_name)
     
-    logger.info(f"🎉 Tamamlandı! {fixed_count} başarısız mesaj düzeltildi")
+    logger.info(f"📱 {len(phone_template_pairs)} benzersiz telefon numarası işlenecek")
+    
+    # BATCH UPDATE - Her telefon için bir kere update
+    from pymongo import UpdateOne
+    
+    bulk_operations = []
+    for phone, templates in phone_template_pairs.items():
+        for template in templates:
+            bulk_operations.append(
+                UpdateOne(
+                    {"phone": phone},
+                    {"$pull": {"sent_templates": template}}
+                )
+            )
+    
+    if bulk_operations:
+        logger.info(f"🚀 {len(bulk_operations)} batch update yapılıyor...")
+        result = contacts_collection.bulk_write(bulk_operations, ordered=False)
+        
+        logger.info(f"✅ Matched: {result.matched_count}")
+        logger.info(f"✅ Modified: {result.modified_count}")
+    else:
+        logger.info("⚠️  Güncellenecek kayıt yok")
+    
+    logger.info(f"🎉 Tamamlandı!")
     logger.info(f"📝 Bu kişiler artık tekrar gönderim alabilir")
 
 if __name__ == "__main__":
