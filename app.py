@@ -12,7 +12,7 @@ from typing import List, Dict, Set
 
 # MongoDB imports
 from database import get_database
-from models import ContactModel, MessageModel, CampaignModel, WebhookLogModel, ChatModel, SalesModel, AdminModel, ProductModel
+from models import ContactModel, MessageModel, SaleModel, ProductModel, TemplateSettingsModel, ChatModel, SalesModel, AdminModel
 
 # .env dosyasını manuel yükle
 def load_env_file():
@@ -1996,9 +1996,12 @@ def api_analytics_stats():
         else:  # all
             start_date = datetime(2020, 1, 1)
         
-        # Mesaj istatistikleri
+        # Mesaj istatistikleri (sent_at kullan)
         messages_pipeline = [
-            {"$match": {"created_at": {"$gte": start_date}}},
+            {"$match": {
+                "sent_at": {"$gte": start_date},
+                "status": {"$in": ["sent", "delivered", "read", "failed"]}
+            }},
             {"$group": {
                 "_id": "$status",
                 "count": {"$sum": 1}
@@ -2008,17 +2011,20 @@ def api_analytics_stats():
         message_stats = list(MessageModel.get_collection().aggregate(messages_pipeline))
         stats_dict = {item['_id']: item['count'] for item in message_stats}
         
-        total_messages = sum(stats_dict.values())
-        sent_messages = stats_dict.get('sent', 0) + stats_dict.get('delivered', 0) + stats_dict.get('read', 0)
-        delivered_messages = stats_dict.get('delivered', 0) + stats_dict.get('read', 0)
+        # Sadece gerçek gönderilen mesajları say
+        sent_messages = stats_dict.get('sent', 0)
+        delivered_messages = stats_dict.get('delivered', 0)
         read_messages = stats_dict.get('read', 0)
         failed_messages = stats_dict.get('failed', 0)
+        
+        total_messages = sent_messages + delivered_messages + read_messages + failed_messages
         
         # Toplam kişi sayısı
         total_contacts = ContactModel.get_collection().count_documents({})
         
-        # Başarı oranları
-        success_rate = round((delivered_messages / total_messages * 100), 1) if total_messages > 0 else 0
+        # Başarı oranları (delivered + read)
+        successful_total = delivered_messages + read_messages
+        success_rate = round((successful_total / total_messages * 100), 1) if total_messages > 0 else 0
         read_rate = round((read_messages / total_messages * 100), 1) if total_messages > 0 else 0
         
         return jsonify({
@@ -2038,6 +2044,58 @@ def api_analytics_stats():
         logger.error(f"Analytics stats error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+@app.route("/api/analytics/daily", methods=["GET"])
+@login_required
+def api_analytics_daily():
+    """Günlük mesaj istatistikleri"""
+    try:
+        from datetime import datetime, timedelta
+        
+        # Son 30 günü getir
+        days = int(request.args.get('days', 30))
+        now = datetime.utcnow()
+        start_date = now - timedelta(days=days)
+        
+        # Günlere göre groupla
+        pipeline = [
+            {"$match": {
+                "sent_at": {"$gte": start_date},
+                "status": {"$in": ["sent", "delivered", "read"]}
+            }},
+            {"$group": {
+                "_id": {
+                    "year": {"$year": "$sent_at"},
+                    "month": {"$month": "$sent_at"},
+                    "day": {"$dayOfMonth": "$sent_at"}
+                },
+                "count": {"$sum": 1}
+            }},
+            {"$sort": {"_id": 1}}
+        ]
+        
+        daily_stats = list(MessageModel.get_collection().aggregate(pipeline))
+        
+        # Format data
+        formatted_data = []
+        for stat in daily_stats:
+            date_obj = datetime(
+                year=stat['_id']['year'],
+                month=stat['_id']['month'],
+                day=stat['_id']['day']
+            )
+            formatted_data.append({
+                "date": date_obj.strftime("%Y-%m-%d"),
+                "count": stat['count']
+            })
+        
+        return jsonify({
+            "success": True,
+            "data": formatted_data
+        })
+    except Exception as e:
+        logger.error(f"Daily analytics error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route("/api/dashboard/stats", methods=["GET"])
 @login_required
 def api_dashboard_stats():
@@ -2049,12 +2107,15 @@ def api_dashboard_stats():
         today_start = datetime(now.year, now.month, now.day)
         week_start = now - timedelta(days=7)
         
-        # Toplam mesajlar
-        total_messages = MessageModel.get_collection().count_documents({})
+        # Toplam gönderilen mesajlar (sadece sent, delivered, read)
+        total_messages = MessageModel.get_collection().count_documents({
+            "status": {"$in": ["sent", "delivered", "read"]}
+        })
         
-        # Bugün gönderilen mesajlar
+        # Bugün gönderilen mesajlar (sent_at kullan)
         today_messages = MessageModel.get_collection().count_documents({
-            "created_at": {"$gte": today_start}
+            "sent_at": {"$gte": today_start},
+            "status": {"$in": ["sent", "delivered", "read"]}
         })
         
         # Toplam kişiler
@@ -2065,17 +2126,18 @@ def api_dashboard_stats():
             "status": {"$in": ["running", "pending"]}
         })
         
-        # Bu hafta gönderilen mesajlar
+        # Bu hafta gönderilen mesajlar (sent_at kullan)
         week_messages = MessageModel.get_collection().count_documents({
-            "created_at": {"$gte": week_start}
+            "sent_at": {"$gte": week_start},
+            "status": {"$in": ["sent", "delivered", "read"]}
         })
         
-        # Başarılı mesajlar
+        # Başarılı mesajlar (delivered ve read)
         successful_messages = MessageModel.get_collection().count_documents({
             "status": {"$in": ["delivered", "read"]}
         })
         
-        # Başarı oranı
+        # Başarı oranı (delivered+read / total)
         success_rate = round((successful_messages / total_messages * 100), 1) if total_messages > 0 else 0
         
         # Okunmamış mesajlar
@@ -2212,6 +2274,13 @@ def api_bulk_send():
         if not template_name:
             return jsonify({"success": False, "error": "template_name gerekli"}), 400
         
+        # Eğer image ID girilmemişse, kaydedilmiş default ID'yi yükle
+        if not header_image_id:
+            saved_image_id = TemplateSettingsModel.get_header_image_id(template_name)
+            if saved_image_id:
+                header_image_id = saved_image_id
+                logger.info(f"📷 Using saved image ID for {template_name}: {header_image_id}")
+        
         # Alıcıları belirle (daha önce almamış olanlar)
         recipients = ContactModel.get_contacts_without_template(template_name)
         
@@ -2221,9 +2290,15 @@ def api_bulk_send():
                 "error": "Gönderilecek kişi bulunamadı (tümü daha önce almış)"
             }), 400
         
-        # Limit varsa uygula
-        if limit and isinstance(limit, int) and limit > 0:
-            recipients = recipients[:limit]
+        # Limit varsa uygula (type conversion)
+        if limit:
+            try:
+                limit_int = int(limit)
+                if limit_int > 0:
+                    recipients = recipients[:limit_int]
+                    logger.info(f"⚠️ LIMIT APPLIED: {limit_int} recipients (original: {len(recipients)})")
+            except (ValueError, TypeError):
+                pass
         
         logger.info(f"🚀 Bulk send starting: {template_name} to {len(recipients)} recipients")
         
@@ -2233,7 +2308,10 @@ def api_bulk_send():
         skipped_count = 0
         details = []
         
-        for contact in recipients:
+        # Progress logging
+        total_recipients = len(recipients)
+        
+        for i, contact in enumerate(recipients, 1):
             phone = contact["phone"]
             name = contact.get("name", "Unknown")
             
@@ -2248,6 +2326,10 @@ def api_bulk_send():
                 })
                 logger.warning(f"⏭️  Skipped (already sent): {name} ({phone})")
                 continue
+            
+            # Progress log (her 10 mesajda bir)
+            if i % 10 == 0 or i == total_recipients:
+                logger.info(f"📊 Progress: {i}/{total_recipients} ({(i/total_recipients*100):.1f}%) - ✅ {success_count} ❌ {failed_count} ⏭️ {skipped_count}")
             
             # Mesaj gönder (image_id ile)
             result = send_template_message(phone, template_name, language_code="tr", header_image_id=header_image_id)
@@ -2266,7 +2348,7 @@ def api_bulk_send():
                     "name": name,
                     "status": "success"
                 })
-                logger.info(f"✅ Sent to {name} ({phone})")
+                logger.info(f"✅ [{i}/{total_recipients}] Sent to {name} ({phone})")
             else:
                 # ❌ BAŞARISIZ - template geçmişine EKLEME (önemli!)
                 MessageModel.create_message(
@@ -2282,7 +2364,7 @@ def api_bulk_send():
                     "status": "failed",
                     "error": result.get("error", "Unknown error")
                 })
-                logger.error(f"❌ Failed to {name} ({phone}): {result.get('error')}")
+                logger.error(f"❌ [{i}/{total_recipients}] Failed to {name} ({phone}): {result.get('error')}")
         
         logger.info(f"✅ Bulk send completed: {success_count} success, {failed_count} failed, {skipped_count} skipped")
         
@@ -2301,6 +2383,180 @@ def api_bulk_send():
         logger.error(f"Bulk send error: {e}")
         import traceback
         logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# ==================== BULK SEND LOGS API ====================
+
+@app.route("/api/bulk-send/logs", methods=["GET"])
+@login_required
+def api_bulk_send_logs():
+    """Toplu gönderim log'larını getir"""
+    try:
+        template_name = request.args.get("template_name")
+        limit = int(request.args.get("limit", 100))
+        
+        query = {}
+        if template_name:
+            query["template_name"] = template_name
+        
+        # Son gönderilen mesajları getir
+        messages = list(MessageModel.get_collection()
+                       .find(query)
+                       .sort("sent_at", -1)
+                       .limit(limit))
+        
+        # Contact bilgilerini ekle
+        logs = []
+        for msg in messages:
+            phone = msg.get("phone")
+            contact = ContactModel.get_contact(phone)
+            
+            logs.append({
+                "phone": phone,
+                "name": contact.get("name", "Unknown") if contact else "Unknown",
+                "template_name": msg.get("template_name"),
+                "status": msg.get("status"),
+                "sent_at": msg.get("sent_at").isoformat() if msg.get("sent_at") else None,
+                "error_message": msg.get("error_message")
+            })
+        
+        return jsonify({
+            "success": True,
+            "logs": logs,
+            "total": len(logs)
+        })
+    except Exception as e:
+        logger.error(f"Bulk send logs error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/contacts/sent-templates/<phone>", methods=["GET"])
+@login_required  
+def api_contact_sent_templates(phone):
+    """Bir contact'a gönderilen template'leri getir"""
+    try:
+        contact = ContactModel.get_contact(phone)
+        
+        if not contact:
+            return jsonify({"success": False, "error": "Contact bulunamadı"}), 404
+        
+        sent_templates = contact.get("sent_templates", [])
+        
+        return jsonify({
+            "success": True,
+            "phone": phone,
+            "name": contact.get("name"),
+            "sent_templates": sent_templates
+        })
+    except Exception as e:
+        logger.error(f"Get sent templates error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# ==================== IMAGE UPLOAD API ====================
+
+@app.route("/api/upload-whatsapp-image", methods=["POST"])
+@login_required
+def api_upload_whatsapp_image():
+    """WhatsApp'a image yükle ve ID'sini kaydet"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({"success": False, "error": "Dosya bulunamadı"}), 400
+        
+        file = request.files['file']
+        template_name = request.form.get('template_name')
+        
+        if file.filename == '':
+            return jsonify({"success": False, "error": "Dosya seçilmedi"}), 400
+        
+        if not template_name:
+            return jsonify({"success": False, "error": "template_name gerekli"}), 400
+        
+        # Dosyayı geçici olarak kaydet
+        import tempfile
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1])
+        file.save(temp_file.name)
+        temp_file.close()
+        
+        try:
+            # WhatsApp Media Upload API
+            url = f"https://graph.facebook.com/v24.0/{PHONE_NUMBER_ID}/media"
+            
+            headers = {
+                "Authorization": f"Bearer {ACCESS_TOKEN}"
+            }
+            
+            # Dosya tipini belirle
+            content_type = file.content_type or 'image/jpeg'
+            
+            with open(temp_file.name, 'rb') as f:
+                files = {
+                    'file': (file.filename, f, content_type)
+                }
+                data = {
+                    'messaging_product': 'whatsapp'
+                }
+                
+                logger.info(f"📤 Uploading image to WhatsApp: {file.filename}")
+                response = requests.post(url, headers=headers, files=files, data=data, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                media_id = result.get('id')
+                
+                # Template için image ID'yi kaydet
+                TemplateSettingsModel.set_header_image_id(template_name, media_id)
+                
+                logger.info(f"✅ Image uploaded successfully: {media_id}")
+                
+                return jsonify({
+                    "success": True,
+                    "media_id": media_id,
+                    "template_name": template_name,
+                    "message": "Image yüklendi ve template'e atandı"
+                })
+            else:
+                error_data = response.json() if response.text else {}
+                error_msg = error_data.get("error", {}).get("message", "Unknown error")
+                logger.error(f"❌ WhatsApp upload error: {error_msg}")
+                
+                return jsonify({
+                    "success": False,
+                    "error": error_msg,
+                    "details": error_data
+                }), response.status_code
+        
+        finally:
+            # Geçici dosyayı sil
+            if os.path.exists(temp_file.name):
+                os.unlink(temp_file.name)
+    
+    except Exception as e:
+        logger.error(f"Image upload error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/template-settings/<template_name>", methods=["GET"])
+@login_required
+def api_get_template_settings(template_name):
+    """Template ayarlarını getir"""
+    try:
+        settings = TemplateSettingsModel.get_template_settings(template_name)
+        
+        if settings:
+            return jsonify({
+                "success": True,
+                "settings": settings
+            })
+        else:
+            return jsonify({
+                "success": True,
+                "settings": {
+                    "template_name": template_name,
+                    "header_image_id": None
+                }
+            })
+    except Exception as e:
+        logger.error(f"Get template settings error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 # Only run Flask dev server when executed directly (not with gunicorn)

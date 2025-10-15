@@ -119,6 +119,44 @@ class ContactModel:
         return contacts
 
 
+class TemplateSettingsModel:
+    """Template ayarları (image ID, vb.)"""
+    
+    @staticmethod
+    def get_collection() -> Collection:
+        return get_database()['template_settings']
+    
+    @staticmethod
+    def get_template_settings(template_name: str) -> Optional[Dict]:
+        """Template ayarlarını getir"""
+        settings = TemplateSettingsModel.get_collection().find_one({"template_name": template_name})
+        if settings:
+            settings['_id'] = str(settings['_id'])
+        return settings
+    
+    @staticmethod
+    def set_header_image_id(template_name: str, image_id: str) -> bool:
+        """Template için header image ID kaydet"""
+        result = TemplateSettingsModel.get_collection().update_one(
+            {"template_name": template_name},
+            {
+                "$set": {
+                    "template_name": template_name,
+                    "header_image_id": image_id,
+                    "updated_at": datetime.utcnow()
+                }
+            },
+            upsert=True
+        )
+        return result.modified_count > 0 or result.upserted_id is not None
+    
+    @staticmethod
+    def get_header_image_id(template_name: str) -> Optional[str]:
+        """Template için kaydedilmiş image ID'yi getir"""
+        settings = TemplateSettingsModel.get_template_settings(template_name)
+        return settings.get("header_image_id") if settings else None
+
+
 class MessageModel:
     """Mesaj Gönderim Takibi"""
     

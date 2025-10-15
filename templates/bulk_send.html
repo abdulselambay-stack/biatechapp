@@ -31,7 +31,7 @@
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Template Seç *</label>
                     <select x-model="formData.template_name" required
-                            @change="loadRecipientStats()"
+                            @change="loadRecipientStats(); loadTemplateSettings(formData.template_name)"
                             class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
                         <option value="">Seçiniz...</option>
                         <template x-for="template in templates" :key="template.name">
@@ -45,11 +45,22 @@
                         Header Image ID (Opsiyonel)
                         <span class="text-xs text-gray-500 font-normal">- Template'de image varsa</span>
                     </label>
-                    <input type="text" 
-                           x-model="formData.header_image_id" 
-                           placeholder="Örn: 1234567890"
-                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
-                    <p class="text-xs text-gray-500 mt-1">Boş bırakılırsa image gönderilmez</p>
+                    <div class="flex gap-2">
+                        <input type="text" 
+                               x-model="formData.header_image_id" 
+                               placeholder="Otomatik yüklenir..."
+                               :class="savedImageId ? 'bg-green-50 border-green-300' : ''"
+                               class="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
+                        <button type="button"
+                                @click="showImageUploadModal = true"
+                                class="px-4 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-medium transition-colors whitespace-nowrap">
+                            📤 Yükle
+                        </button>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">
+                        <span x-show="savedImageId" class="text-green-600">✓ Kaydedilmiş ID kullanılıyor</span>
+                        <span x-show="!savedImageId">Boş bırakılırsa image gönderilmez</span>
+                    </p>
                 </div>
             </div>
 
@@ -236,6 +247,65 @@
             </button>
         </div>
     </div>
+    
+    <!-- Image Upload Modal -->
+    <div x-show="showImageUploadModal" 
+         x-cloak
+         @click.self="showImageUploadModal = false"
+         class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+         x-transition>
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" @click.stop>
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold text-gray-900">📤 WhatsApp Image Yükle</h3>
+                <button @click="showImageUploadModal = false" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Template *</label>
+                    <input type="text" 
+                           x-model="formData.template_name" 
+                           readonly
+                           class="w-full px-4 py-3 bg-gray-100 border border-gray-300 rounded-xl">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Image Dosyası *</label>
+                    <input type="file" 
+                           @change="handleImageSelect($event)"
+                           accept="image/*"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500">
+                    <p class="text-xs text-gray-500 mt-1">JPG, PNG desteklenir</p>
+                </div>
+                
+                <div x-show="selectedImageFile" class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <p class="text-sm text-blue-900">
+                        📎 <span x-text="selectedImageFile?.name"></span>
+                    </p>
+                </div>
+                
+                <div class="flex gap-3 pt-4">
+                    <button type="button" 
+                            @click="showImageUploadModal = false"
+                            class="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-medium transition-colors">
+                        İptal
+                    </button>
+                    <button type="button"
+                            @click="uploadImageToWhatsApp()"
+                            :disabled="!selectedImageFile || uploadingImage"
+                            :class="!selectedImageFile || uploadingImage ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'"
+                            class="flex-1 px-4 py-3 text-white rounded-xl font-medium transition-colors">
+                        <span x-show="!uploadingImage">Yükle ve Kaydet</span>
+                        <span x-show="uploadingImage">Yükleniyor...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -261,6 +331,10 @@ function bulkSend() {
         sendLogs: [],
         abortController: null,
         shouldStop: false,
+        showImageUploadModal: false,
+        selectedImageFile: null,
+        uploadingImage: false,
+        savedImageId: null,
         progress: {
             current: 0,
             total: 0,
@@ -289,6 +363,68 @@ function bulkSend() {
                 }
             } catch (error) {
                 console.error('Template yükleme hatası:', error);
+            }
+        },
+        
+        async loadTemplateSettings(templateName) {
+            if (!templateName) return;
+            
+            try {
+                const response = await fetch(`/api/template-settings/${templateName}`);
+                const data = await response.json();
+                
+                if (data.success && data.settings.header_image_id) {
+                    this.formData.header_image_id = data.settings.header_image_id;
+                    this.savedImageId = data.settings.header_image_id;
+                    console.log(`📷 Loaded saved image ID: ${this.savedImageId}`);
+                } else {
+                    this.savedImageId = null;
+                }
+            } catch (error) {
+                console.error('Template settings yükleme hatası:', error);
+            }
+        },
+        
+        handleImageSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                this.selectedImageFile = file;
+            }
+        },
+        
+        async uploadImageToWhatsApp() {
+            if (!this.selectedImageFile || !this.formData.template_name) {
+                alert('Lütfen template ve image seçin');
+                return;
+            }
+            
+            this.uploadingImage = true;
+            
+            try {
+                const formData = new FormData();
+                formData.append('file', this.selectedImageFile);
+                formData.append('template_name', this.formData.template_name);
+                
+                const response = await fetch('/api/upload-whatsapp-image', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.formData.header_image_id = data.media_id;
+                    this.savedImageId = data.media_id;
+                    this.showImageUploadModal = false;
+                    this.selectedImageFile = null;
+                    alert(`✅ Image yüklendi!\nMedia ID: ${data.media_id}`);
+                } else {
+                    alert(`❌ Hata: ${data.error}`);
+                }
+            } catch (error) {
+                alert(`❌ Bağlantı hatası: ${error.message}`);
+            } finally {
+                this.uploadingImage = false;
             }
         },
         
@@ -364,6 +500,14 @@ function bulkSend() {
                 // AbortController for cancellation
                 this.abortController = new AbortController();
                 
+                // Long timeout for bulk send (5 minutes)
+                const timeoutId = setTimeout(() => {
+                    if (this.abortController) {
+                        this.addLog(`⏱️ Request timeout (5 dakika)`, 'error');
+                        this.abortController.abort();
+                    }
+                }, 300000); // 5 minutes
+                
                 const response = await fetch('/api/bulk-send', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -371,9 +515,17 @@ function bulkSend() {
                     signal: this.abortController.signal
                 });
                 
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
                 
                 if (data.success) {
+                    this.addLog(`📦 Sunucudan ${data.details?.length || 0} sonuç alındı`, 'info');
+                    
                     // Show detailed logs
                     if (data.details && data.details.length > 0) {
                         for (const detail of data.details) {
@@ -391,8 +543,15 @@ function bulkSend() {
                             }
                             
                             // Small delay for visual effect
-                            await new Promise(resolve => setTimeout(resolve, 50));
+                            await new Promise(resolve => setTimeout(resolve, 30));
                         }
+                    } else {
+                        // Details yoksa sadece summary göster
+                        this.addLog(`⚠️ Detaylı log alınamadı, sadece özet`, 'info');
+                        this.progress.success = data.results.success;
+                        this.progress.failed = data.results.failed;
+                        this.progress.skipped = data.results.skipped;
+                        this.progress.current = data.results.total;
                     }
                     
                     this.addLog(``, 'info');
