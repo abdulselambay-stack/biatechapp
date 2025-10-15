@@ -590,12 +590,21 @@ class ProductModel:
         
         if use_tier_pricing and pricing_tiers:
             # Tier pricing modu
-            product["pricing_tiers"] = pricing_tiers
+            # Tier'ları temizle ve float'a çevir
+            cleaned_tiers = []
+            for tier in pricing_tiers:
+                cleaned_tiers.append({
+                    'min_quantity': int(tier.get('min_quantity', 1)),
+                    'cost_price': float(tier.get('cost_price', 0)),
+                    'sale_price': float(tier.get('sale_price', 0))
+                })
+            
+            product["pricing_tiers"] = cleaned_tiers
             # İlk tier'ı default olarak kullan
-            if pricing_tiers:
-                first_tier = pricing_tiers[0]
-                product["cost_price"] = float(first_tier.get('cost_price', 0))
-                product["sale_price"] = float(first_tier.get('sale_price', 0))
+            if cleaned_tiers:
+                first_tier = cleaned_tiers[0]
+                product["cost_price"] = first_tier['cost_price']
+                product["sale_price"] = first_tier['sale_price']
         else:
             # Basit mod
             product["cost_price"] = float(cost_price) if cost_price else 0
@@ -658,11 +667,20 @@ class ProductModel:
         }
         
         if use_tier_pricing and pricing_tiers:
-            update_data["pricing_tiers"] = pricing_tiers
-            if pricing_tiers:
-                first_tier = pricing_tiers[0]
-                update_data["cost_price"] = float(first_tier.get('cost_price', 0))
-                update_data["sale_price"] = float(first_tier.get('sale_price', 0))
+            # Tier'ları temizle ve float'a çevir
+            cleaned_tiers = []
+            for tier in pricing_tiers:
+                cleaned_tiers.append({
+                    'min_quantity': int(tier.get('min_quantity', 1)),
+                    'cost_price': float(tier.get('cost_price', 0)),
+                    'sale_price': float(tier.get('sale_price', 0))
+                })
+            
+            update_data["pricing_tiers"] = cleaned_tiers
+            if cleaned_tiers:
+                first_tier = cleaned_tiers[0]
+                update_data["cost_price"] = first_tier['cost_price']
+                update_data["sale_price"] = first_tier['sale_price']
         else:
             update_data["cost_price"] = float(cost_price) if cost_price else 0
             update_data["sale_price"] = float(sale_price) if sale_price else 0
@@ -703,27 +721,27 @@ class SalesModel:
         """Miktara göre uygun tier fiyatını bul"""
         if not product.get('use_tier_pricing') or not product.get('pricing_tiers'):
             return {
-                'cost_price': product.get('cost_price', 0),
-                'sale_price': product.get('sale_price', 0)
+                'cost_price': float(product.get('cost_price', 0)),
+                'sale_price': float(product.get('sale_price', 0))
             }
         
         # Tier'ları sırala (min_quantity'ye göre azalan)
         tiers = sorted(product['pricing_tiers'], 
-                      key=lambda x: x.get('min_quantity', 0), 
+                      key=lambda x: int(x.get('min_quantity', 0)), 
                       reverse=True)
         
         # Uygun tier'ı bul
         for tier in tiers:
-            if quantity >= tier.get('min_quantity', 0):
+            if quantity >= int(tier.get('min_quantity', 0)):
                 return {
                     'cost_price': float(tier.get('cost_price', 0)),
                     'sale_price': float(tier.get('sale_price', 0))
                 }
         
-        # Hiçbiri uymazsa ilk tier
+        # Hiçbiri uymazsa ilk tier (default fiyat)
         return {
-            'cost_price': product.get('cost_price', 0),
-            'sale_price': product.get('sale_price', 0)
+            'cost_price': float(product.get('cost_price', 0)),
+            'sale_price': float(product.get('sale_price', 0))
         }
     
     @staticmethod
@@ -770,6 +788,10 @@ class SalesModel:
         
         result = SalesModel.get_collection().insert_one(sale)
         sale['_id'] = str(result.inserted_id)
+        
+        # Datetime'ları ISO string'e çevir (response için)
+        sale['sale_date'] = sale['sale_date'].isoformat()
+        sale['created_at'] = sale['created_at'].isoformat()
         
         # Contact'a satış flag'i ekle
         ContactModel.get_collection().update_one(
