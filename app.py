@@ -2263,7 +2263,13 @@ def api_get_templates():
 @app.route("/api/bulk-send/preview", methods=["GET"])
 @login_required
 def api_bulk_send_preview():
-    """Toplu gönderim öncesi istatistik"""
+    """
+    Toplu gönderim öncesi istatistik
+    
+    Kontroller:
+    1. sent_templates field (ContactModel)
+    2. MessageModel'deki başarılı gönderimler (sent/delivered/read)
+    """
     try:
         template_name = request.args.get("template_name")
         limit_str = request.args.get("limit", "")
@@ -2274,8 +2280,25 @@ def api_bulk_send_preview():
         # Tüm aktif kişileri getir
         all_contacts = ContactModel.get_all_contacts(is_active=True)
         
-        # Daha önce bu template'i almamış olanları filtrele
-        eligible_contacts = ContactModel.get_contacts_without_template(template_name)
+        # MessageModel'de bu template için başarılı gönderim yapılmış telefonları al
+        messages_sent = MessageModel.get_collection().distinct("phone", {
+            "template_name": template_name,
+            "status": {"$in": ["sent", "delivered", "read"]}
+        })
+        messages_sent_set = set(messages_sent)
+        
+        # Daha önce almamış olanları filtrele (hem sent_templates hem MessageModel kontrolü)
+        eligible_contacts = []
+        already_sent_count = 0
+        
+        for contact in all_contacts:
+            phone = contact["phone"]
+            
+            # sent_templates veya MessageModel'de varsa skip
+            if template_name in contact.get("sent_templates", []) or phone in messages_sent_set:
+                already_sent_count += 1
+            else:
+                eligible_contacts.append(contact)
         
         # Limit varsa uygula
         will_send = len(eligible_contacts)
@@ -2285,9 +2308,11 @@ def api_bulk_send_preview():
         
         stats = {
             "total_recipients": len(all_contacts),
-            "already_sent": len(all_contacts) - len(eligible_contacts),
+            "already_sent": already_sent_count,
             "will_send": will_send
         }
+        
+        logger.info(f"📊 Preview: {len(all_contacts)} total, {already_sent_count} already sent ({len(messages_sent_set)} in messages), {len(eligible_contacts)} eligible")
         
         return jsonify({
             "success": True,
