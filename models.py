@@ -369,7 +369,7 @@ class ChatModel:
         return get_database()['chats']
     
     @staticmethod
-    def save_message(phone: str, direction: str, message_type: str, content: str, media_url: str = None):
+    def save_message(phone: str, direction: str, message_type: str, content: str, media_url: str = None, timestamp: datetime = None):
         """Chat mesajı kaydet (gelen/giden)"""
         message = {
             "phone": phone,
@@ -378,7 +378,7 @@ class ChatModel:
             "content": content,
             "media_url": media_url,
             "is_read": direction == "outgoing",  # Giden mesajlar otomatik okunmuş
-            "timestamp": datetime.utcnow()
+            "timestamp": timestamp if timestamp else datetime.utcnow()  # Custom timestamp desteği
         }
         
         result = ChatModel.get_collection().insert_one(message)

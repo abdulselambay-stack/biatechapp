@@ -144,29 +144,45 @@ def api_bulk_send():
             
             if result["success"]:
                 # ✅ BAŞARILI - template geçmişine ekle
-                ContactModel.add_sent_template(phone, template_name)
-                MessageModel.create_message(
-                    phone=phone,
-                    template_name=template_name,
-                    status="sent"
-                )
-                
-                # Chat'e kaydet (Toplu Gönderim)
-                ChatModel.save_message(
-                    phone=phone,
-                    direction="outgoing",
-                    message_type="template",
-                    content=f"📤 Toplu Gönderim: {template_name}",
-                    media_url=None
-                )
-                
-                success_count += 1
-                details.append({
-                    "phone": phone,
-                    "name": name,
-                    "status": "success"
-                })
-                logger.info(f"✅ [{i}/{total_recipients}] Sent to {name} ({phone})")
+                try:
+                    ContactModel.add_sent_template(phone, template_name)
+                    MessageModel.create_message(
+                        phone=phone,
+                        template_name=template_name,
+                        status="sent"
+                    )
+                    
+                    # Chat'e kaydet (Toplu Gönderim)
+                    try:
+                        ChatModel.save_message(
+                            phone=phone,
+                            direction="outgoing",
+                            message_type="template",
+                            content=f"📤 Toplu Gönderim: {template_name}",
+                            media_url=None
+                        )
+                    except Exception as chat_error:
+                        # Chat kaydetme başarısız olsa bile devam et
+                        logger.warning(f"⚠️  Chat kaydetme hatası ({phone}): {chat_error}")
+                    
+                    success_count += 1
+                    details.append({
+                        "phone": phone,
+                        "name": name,
+                        "status": "success"
+                    })
+                    logger.info(f"✅ [{i}/{total_recipients}] Sent to {name} ({phone})")
+                    
+                except Exception as e:
+                    # MessageModel veya ContactModel hatası - bu kritik!
+                    logger.error(f"❌ Database error for {phone}: {e}")
+                    failed_count += 1
+                    details.append({
+                        "phone": phone,
+                        "name": name,
+                        "status": "failed",
+                        "error": f"Database error: {str(e)}"
+                    })
             else:
                 # ❌ BAŞARISIZ - template geçmişine EKLEME (önemli!)
                 MessageModel.create_message(
