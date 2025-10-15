@@ -1,0 +1,93 @@
+"""
+Chat Routes
+Chat history and messaging
+"""
+
+from flask import Blueprint, request, jsonify, render_template
+from routes.auth import login_required
+from models import ChatModel, ContactModel
+import logging
+
+chat_bp = Blueprint('chat', __name__)
+logger = logging.getLogger(__name__)
+
+@chat_bp.route("/chat")
+@login_required
+def chat_page():
+    """Chat sayfası"""
+    return render_template("chat.html")
+
+@chat_bp.route("/api/chats", methods=["GET"])
+def api_get_chats():
+    """
+    Tüm chat'leri getir (MongoDB)
+    
+    Query params:
+    - filter: all (default), incoming, unread, replied
+    """
+    try:
+        filter_type = request.args.get('filter', 'all')
+        chats = ChatModel.get_all_chats(filter_type=filter_type)
+        
+        # Her chat için contact bilgisini ekle
+        for chat in chats:
+            contact = ContactModel.get_contact(chat['phone'])
+            if contact:
+                chat['name'] = contact['name']
+            else:
+                chat['name'] = chat['phone']
+        
+        return jsonify({
+            "success": True,
+            "chats": chats,
+            "filter": filter_type
+        })
+    except Exception as e:
+        logger.error(f"Get chats error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@chat_bp.route("/api/chat/<phone>", methods=["GET"])
+def api_get_chat_history(phone):
+    """Bir kişiyle olan chat geçmişini getir (MongoDB)"""
+    try:
+        limit = int(request.args.get("limit", 100))
+        messages = ChatModel.get_chat_history(phone, limit=limit)
+        
+        # Mesajları okundu olarak işaretle
+        ChatModel.mark_messages_as_read(phone)
+        
+        return jsonify({
+            "success": True,
+            "messages": messages
+        })
+    except Exception as e:
+        logger.error(f"Get chat history error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@chat_bp.route("/api/chat/<phone>/mark-read", methods=["POST"])
+def api_mark_chat_read(phone):
+    """Chat'i okundu olarak işaretle"""
+    try:
+        ChatModel.mark_messages_as_read(phone)
+        
+        return jsonify({
+            "success": True,
+            "message": "Mesajlar okundu olarak işaretlendi"
+        })
+    except Exception as e:
+        logger.error(f"Mark read error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@chat_bp.route("/api/chat/unread-count", methods=["GET"])
+def api_get_unread_count():
+    """Toplam okunmamış mesaj sayısı"""
+    try:
+        total = ChatModel.get_total_unread_count()
+        
+        return jsonify({
+            "success": True,
+            "unread_count": total
+        })
+    except Exception as e:
+        logger.error(f"Get unread count error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
