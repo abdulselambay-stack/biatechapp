@@ -20,6 +20,30 @@
                     Yeni Sohbet Başlat
                 </button>
                 
+                <!-- Filters -->
+                <div class="grid grid-cols-2 gap-2">
+                    <button @click="currentFilter = 'all'; loadChats()" 
+                            :class="currentFilter === 'all' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                            class="px-3 py-2 rounded-lg text-xs font-medium transition-colors">
+                        📋 Tümü
+                    </button>
+                    <button @click="currentFilter = 'incoming'; loadChats()" 
+                            :class="currentFilter === 'incoming' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                            class="px-3 py-2 rounded-lg text-xs font-medium transition-colors">
+                        💬 Mesaj Atanlar
+                    </button>
+                    <button @click="currentFilter = 'unread'; loadChats()" 
+                            :class="currentFilter === 'unread' ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                            class="px-3 py-2 rounded-lg text-xs font-medium transition-colors">
+                        🔔 Okunmayanlar
+                    </button>
+                    <button @click="currentFilter = 'replied'; loadChats()" 
+                            :class="currentFilter === 'replied' ? 'bg-purple-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                            class="px-3 py-2 rounded-lg text-xs font-medium transition-colors">
+                        ✅ Konuştuklarımız
+                    </button>
+                </div>
+                
                 <div class="relative">
                     <input type="text" 
                            x-model="searchQuery"
@@ -43,12 +67,17 @@
                         </div>
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center justify-between mb-1">
-                                <p class="font-semibold text-gray-900 truncate" x-text="chatItem.name || chatItem.phone"></p>
-                                <span class="text-xs text-gray-500" x-text="formatTime(chatItem.last_message_time)"></span>
+                                <div class="flex items-center gap-2 flex-1 min-w-0">
+                                    <p class="font-semibold text-gray-900 truncate" x-text="chatItem.name || chatItem.phone"></p>
+                                    <!-- Badges -->
+                                    <span x-show="chatItem.has_bulk_send" class="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">📤</span>
+                                    <span x-show="chatItem.has_replied" class="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded">✅</span>
+                                    <span x-show="chatItem.unread_count > 0" class="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded font-bold" x-text="chatItem.unread_count"></span>
+                                </div>
+                                <span class="text-xs text-gray-500 ml-2" x-text="formatTime(chatItem.last_message_time)"></span>
                             </div>
                             <p class="text-sm text-gray-600 truncate" x-text="chatItem.last_message"></p>
                         </div>
-                        <div x-show="chatItem.unread_count > 0" class="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full" x-text="chatItem.unread_count"></div>
                     </button>
                 </template>
                 
@@ -120,8 +149,20 @@
                     <div class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50" x-ref="messagesContainer">
                         <template x-for="(message, index) in messages" :key="index">
                             <div :class="message.direction === 'outgoing' ? 'flex justify-end' : 'flex justify-start'">
-                                <div :class="message.direction === 'outgoing' ? 'bg-green-500 text-white' : 'bg-white border border-gray-200 text-gray-900'"
+                                <div :class="{
+                                         'bg-green-500 text-white': message.direction === 'outgoing' && message.message_type !== 'template',
+                                         'bg-gradient-to-br from-blue-500 to-blue-600 text-white border-l-4 border-blue-300': message.direction === 'outgoing' && message.message_type === 'template',
+                                         'bg-white border border-gray-200 text-gray-900': message.direction === 'incoming'
+                                     }"
                                      class="max-w-[70%] rounded-2xl px-4 py-2 shadow">
+                                    
+                                    <!-- Template Badge -->
+                                    <template x-if="message.message_type === 'template'">
+                                        <div class="flex items-center gap-1 mb-2 text-xs opacity-90">
+                                            <span>📤</span>
+                                            <span class="font-medium">Toplu Gönderim</span>
+                                        </div>
+                                    </template>
                                     
                                     <!-- Image -->
                                     <template x-if="message.message_type === 'image' && message.media_url">
@@ -132,7 +173,7 @@
                                     <p class="text-sm break-words" x-text="message.content"></p>
                                     
                                     <!-- Time -->
-                                    <p :class="message.direction === 'outgoing' ? 'text-green-100' : 'text-gray-400'"
+                                    <p :class="message.direction === 'outgoing' ? 'text-white/70' : 'text-gray-400'"
                                        class="text-xs mt-1" x-text="formatTime(message.timestamp)"></p>
                                 </div>
                             </div>
@@ -396,6 +437,7 @@ function chat() {
         products: [],
         searchQuery: '',
         contactSearchQuery: '',
+        currentFilter: 'all',
         selectedPhone: null,
         selectedChat: null,
         selectedProduct: null,
@@ -442,7 +484,7 @@ function chat() {
         
         async loadChats() {
             try {
-                const response = await fetch('/api/chats');
+                const response = await fetch(`/api/chats?filter=${this.currentFilter}`);
                 const data = await response.json();
                 
                 if (data.success) {

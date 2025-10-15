@@ -381,14 +381,23 @@ class ChatModel:
         return list(reversed(chats))  # Eskiden yeniye sırala
     
     @staticmethod
-    def get_all_chats() -> List[Dict]:
-        """Tüm chat'leri telefon numarasına göre grupla"""
+    def get_all_chats(filter_type: str = "all") -> List[Dict]:
+        """
+        Tüm chat'leri telefon numarasına göre grupla
+        
+        filter_type:
+        - "all": Tüm konuşmalar
+        - "incoming": Bize mesaj atanlar (incoming message var)
+        - "unread": Okunmayanlar (last message incoming ve unread)
+        - "replied": Bizim cevap verdiklerimiz (incoming + outgoing var)
+        """
         pipeline = [
             {"$sort": {"timestamp": -1}},
             {"$group": {
                 "_id": "$phone",
                 "last_message": {"$first": "$content"},
                 "last_message_time": {"$first": "$timestamp"},
+                "last_message_direction": {"$first": "$direction"},
                 "message_count": {"$sum": 1},
                 "unread_count": {
                     "$sum": {
@@ -401,6 +410,15 @@ class ChatModel:
                             0
                         ]
                     }
+                },
+                "incoming_count": {
+                    "$sum": {"$cond": [{"$eq": ["$direction", "incoming"]}, 1, 0]}
+                },
+                "outgoing_count": {
+                    "$sum": {"$cond": [{"$eq": ["$direction", "outgoing"]}, 1, 0]}
+                },
+                "has_bulk_send": {
+                    "$max": {"$cond": [{"$eq": ["$message_type", "template"]}, True, False]}
                 }
             }},
             {"$sort": {"last_message_time": -1}}
@@ -408,11 +426,24 @@ class ChatModel:
         
         chats = list(ChatModel.get_collection().aggregate(pipeline))
         
+        # Filtreleme uygula
+        filtered_chats = []
         for chat in chats:
             chat['phone'] = chat.pop('_id')
             chat['last_message_time'] = chat['last_message_time'].isoformat()
+            chat['has_replied'] = chat['incoming_count'] > 0 and chat['outgoing_count'] > 0
+            
+            # Filtre kontrolü
+            if filter_type == "all":
+                filtered_chats.append(chat)
+            elif filter_type == "incoming" and chat['incoming_count'] > 0:
+                filtered_chats.append(chat)
+            elif filter_type == "unread" and chat['unread_count'] > 0:
+                filtered_chats.append(chat)
+            elif filter_type == "replied" and chat['has_replied']:
+                filtered_chats.append(chat)
         
-        return chats
+        return filtered_chats
     
     @staticmethod
     def mark_messages_as_read(phone: str):

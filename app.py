@@ -1634,9 +1634,15 @@ def api_delete_contact(phone):
 
 @app.route("/api/chats", methods=["GET"])
 def api_get_chats():
-    """Tüm chat'leri getir (MongoDB)"""
+    """
+    Tüm chat'leri getir (MongoDB)
+    
+    Query params:
+    - filter: all (default), incoming, unread, replied
+    """
     try:
-        chats = ChatModel.get_all_chats()
+        filter_type = request.args.get('filter', 'all')
+        chats = ChatModel.get_all_chats(filter_type=filter_type)
         
         # Her chat için contact bilgisini ekle
         for chat in chats:
@@ -1645,11 +1651,11 @@ def api_get_chats():
                 chat['name'] = contact['name']
             else:
                 chat['name'] = chat['phone']
-            chat['unread'] = 0  # TODO: Implement unread count
         
         return jsonify({
             "success": True,
-            "chats": chats
+            "chats": chats,
+            "filter": filter_type
         })
     except Exception as e:
         logger.error(f"Get chats error: {e}")
@@ -2382,6 +2388,16 @@ def api_bulk_send():
                     template_name=template_name,
                     status="sent"
                 )
+                
+                # Chat'e kaydet (Toplu Gönderim)
+                ChatModel.save_message(
+                    phone=phone,
+                    direction="outgoing",
+                    message_type="template",
+                    content=f"📤 Toplu Gönderim: {template_name}",
+                    media_url=None
+                )
+                
                 success_count += 1
                 details.append({
                     "phone": phone,
