@@ -133,7 +133,8 @@ class MessageModel:
         message_type: str = "template",
         content: str = "",
         media_url: str = None,
-        status: str = "pending"
+        status: str = "pending",
+        error_message: str = None
     ) -> Dict:
         """Yeni mesaj kaydı oluştur"""
         message = {
@@ -147,8 +148,8 @@ class MessageModel:
             "sent_at": datetime.utcnow(),
             "delivered_at": None,
             "read_at": None,
-            "failed_at": None,
-            "error_message": None,
+            "failed_at": datetime.utcnow() if status == "failed" else None,
+            "error_message": error_message,
             "metadata": {}
         }
         
