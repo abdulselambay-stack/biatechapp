@@ -2015,11 +2015,14 @@ def api_analytics_stats():
     try:
         from datetime import datetime, timedelta
         
-        # Zaman aralığı
-        time_range = request.args.get('range', '7d')
+        # Zaman aralığı (range veya time_range parametresi)
+        time_range = request.args.get('time_range') or request.args.get('range', 'all')
         now = datetime.utcnow()
         
-        if time_range == '7d':
+        if time_range == 'today':
+            # Bugün (UTC gece yarısından itibaren)
+            start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif time_range == '7d':
             start_date = now - timedelta(days=7)
         elif time_range == '30d':
             start_date = now - timedelta(days=30)
@@ -2494,7 +2497,10 @@ def api_bulk_send_logs():
         if template_name:
             query["template_name"] = template_name
         
-        # Son gönderilen mesajları getir
+        # TOPLAM kayıt sayısını al (limit yok)
+        total_count = MessageModel.get_collection().count_documents(query)
+        
+        # Son gönderilen mesajları getir (limit ile)
         messages = list(MessageModel.get_collection()
                        .find(query)
                        .sort("sent_at", -1)
@@ -2518,7 +2524,8 @@ def api_bulk_send_logs():
         return jsonify({
             "success": True,
             "logs": logs,
-            "total": len(logs)
+            "total": total_count,  # Gerçek toplam
+            "showing": len(logs)   # Gösterilen kayıt sayısı
         })
     except Exception as e:
         logger.error(f"Bulk send logs error: {e}")

@@ -7,6 +7,33 @@
 {% block content %}
 <div class="space-y-6" x-data="dashboard()">
     
+    <!-- Time Range Filter -->
+    <div class="bg-white rounded-2xl shadow-lg p-4 border border-gray-100">
+        <div class="flex items-center gap-3 flex-wrap">
+            <span class="text-sm font-medium text-gray-700">Zaman Aralığı:</span>
+            <button @click="timeRange = 'today'; loadStats()" 
+                    :class="timeRange === 'today' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                    class="px-4 py-2 rounded-lg text-sm font-medium transition-all">
+                📅 Bugün
+            </button>
+            <button @click="timeRange = '7d'; loadStats()" 
+                    :class="timeRange === '7d' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                    class="px-4 py-2 rounded-lg text-sm font-medium transition-all">
+                📊 Son 7 Gün
+            </button>
+            <button @click="timeRange = '30d'; loadStats()" 
+                    :class="timeRange === '30d' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                    class="px-4 py-2 rounded-lg text-sm font-medium transition-all">
+                📈 Son 30 Gün
+            </button>
+            <button @click="timeRange = 'all'; loadStats()" 
+                    :class="timeRange === 'all' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                    class="px-4 py-2 rounded-lg text-sm font-medium transition-all">
+                🌐 Tüm Zamanlar
+            </button>
+        </div>
+    </div>
+    
     <!-- Stats Grid -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         
@@ -265,6 +292,7 @@
 <script>
 function dashboard() {
     return {
+        timeRange: 'all',
         stats: {
             total_contacts: 0,
             sent: 0,
@@ -281,7 +309,8 @@ function dashboard() {
         
         async loadStats() {
             try {
-                const response = await fetch('/api/analytics/stats?time_range=all');
+                // timeRange: today, 7d, 30d, all
+                const response = await fetch(`/api/analytics/stats?time_range=${this.timeRange}`);
                 const data = await response.json();
                 
                 if (data.success) {
