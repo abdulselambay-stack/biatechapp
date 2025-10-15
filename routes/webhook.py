@@ -12,7 +12,7 @@ import os
 webhook_bp = Blueprint('webhook', __name__)
 logger = logging.getLogger(__name__)
 
-VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "biatech2024")
+VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "technoglobal123")
 
 @webhook_bp.route("/health")
 def health_check():

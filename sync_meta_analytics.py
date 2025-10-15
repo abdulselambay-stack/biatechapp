@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 # Meta API credentials
 WHATSAPP_BUSINESS_ID = os.environ.get("WHATSAPP_BUSINESS_ID")
-ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN")
+ACCESS_TOKEN = os.environ.get("WHATSAPP_ACCESS_TOKEN") or os.environ.get("ACCESS_TOKEN")
 
 def get_meta_analytics():
     """Meta Analytics API'den veri çek"""

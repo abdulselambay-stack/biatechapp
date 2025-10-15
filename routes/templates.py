@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 # WhatsApp API Config
 WHATSAPP_BUSINESS_ID = os.environ.get("WHATSAPP_BUSINESS_ID")
-ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN")
+ACCESS_TOKEN = os.environ.get("WHATSAPP_ACCESS_TOKEN") or os.environ.get("ACCESS_TOKEN")
 
 @templates_bp.route("/api/templates", methods=["GET"])
 @login_required

@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 # WhatsApp API Config
 PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
-ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN")
+ACCESS_TOKEN = os.environ.get("WHATSAPP_ACCESS_TOKEN") or os.environ.get("ACCESS_TOKEN")
 WHATSAPP_API_URL = f"https://graph.facebook.com/v21.0/{PHONE_NUMBER_ID}/messages"
 
 def send_template_message(phone_number: str, template_name: str, language_code: str = "tr", header_image_id: str = None) -> Dict:
