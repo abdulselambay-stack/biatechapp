@@ -581,10 +581,19 @@ function chat() {
         
         filterChats() {
             const query = this.searchQuery.toLowerCase();
-            this.filteredChats = this.chats.filter(c => 
+            let filtered = this.chats.filter(c => 
                 c.name?.toLowerCase().includes(query) || 
                 c.phone.includes(query)
             );
+            
+            // Sıralama: En yeni mesaja sahip chat her zaman üstte
+            filtered.sort((a, b) => {
+                const dateA = new Date(a.last_message_time);
+                const dateB = new Date(b.last_message_time);
+                return dateB - dateA; // Descending: en yeni üstte
+            });
+            
+            this.filteredChats = filtered;
         },
         
         async loadContacts() {
@@ -822,34 +831,51 @@ function chat() {
         
         async checkNewMessages() {
             try {
-                // Chat listesini yeniden yükle (unread_count'u güncellemek için)
+                // Sadece ilk sayfayı yeniden yükle (yeni mesajları görmek için)
                 const prevChats = JSON.parse(JSON.stringify(this.chats));
-                await this.loadChats();
                 
-                // Yeni mesaj bildirimlerini kontrol et
-                this.chats.forEach((chat, index) => {
-                    const prevChat = prevChats.find(c => c.phone === chat.phone);
-                    
-                    // Eğer unread_count arttıysa bildirim göster
-                    if (prevChat && chat.unread_count > (prevChat.unread_count || 0)) {
-                        this.showNotification(chat);
-                        
-                        // Eğer seçili chat değilse ses çal
-                        if (this.selectedPhone !== chat.phone) {
-                            this.playNotificationSound();
-                        }
-                    }
+                const params = new URLSearchParams({
+                    filter: this.currentFilter,
+                    page: 1,
+                    limit: 20
                 });
                 
-                // Eğer seçili chat'te yeniyse mesajları güncelle
-                if (this.selectedPhone) {
-                    const selectedChat = this.chats.find(c => c.phone === this.selectedPhone);
-                    const prevSelectedChat = prevChats.find(c => c.phone === this.selectedPhone);
+                const response = await fetch(`/api/chats?${params}`);
+                const data = await response.json();
+                
+                if (data.success && data.chats.length > 0) {
+                    // İlk sayfadaki chat'leri güncelle
+                    data.chats.forEach(newChat => {
+                        const existingIndex = this.chats.findIndex(c => c.phone === newChat.phone);
+                        if (existingIndex >= 0) {
+                            // Mevcut chat'i güncelle
+                            this.chats[existingIndex] = newChat;
+                        } else {
+                            // Yeni chat'i başa ekle
+                            this.chats.unshift(newChat);
+                        }
+                    });
                     
-                    if (selectedChat && prevSelectedChat && 
-                        selectedChat.message_count > prevSelectedChat.message_count) {
-                        await this.refreshMessages();
-                    }
+                    // Sıralamayı koru
+                    this.filterChats();
+                    
+                    // Bildirim kontrolü
+                    data.chats.forEach(chat => {
+                        const prevChat = prevChats.find(c => c.phone === chat.phone);
+                        
+                        if (prevChat && chat.unread_count > (prevChat.unread_count || 0)) {
+                            this.showNotification(chat);
+                            
+                            if (this.selectedPhone !== chat.phone) {
+                                this.playNotificationSound();
+                            }
+                        }
+                    });
+                }
+                
+                // Seçili chat'in mesajlarını güncelle
+                if (this.selectedPhone) {
+                    await this.refreshMessages();
                 }
             } catch (error) {
                 console.error('Mesaj kontrol hatası:', error);
