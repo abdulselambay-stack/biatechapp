@@ -22,25 +22,25 @@
                 
                 <!-- Filters -->
                 <div class="grid grid-cols-2 gap-2">
-                    <button @click="currentFilter = 'all'; loadChats()" 
+                    <button @click="setFilter('all')" 
                             :class="currentFilter === 'all' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
                             class="px-3 py-2 rounded-lg text-xs font-medium transition-colors">
-                        📋 Tümü
+                        📋 Tümü (<span x-text="chatStats.all">0</span>)
                     </button>
-                    <button @click="currentFilter = 'incoming'; loadChats()" 
+                    <button @click="setFilter('incoming')" 
                             :class="currentFilter === 'incoming' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
                             class="px-3 py-2 rounded-lg text-xs font-medium transition-colors">
-                        💬 Mesaj Atanlar
+                        💬 Mesaj Atanlar (<span x-text="chatStats.incoming">0</span>)
                     </button>
-                    <button @click="currentFilter = 'unread'; loadChats()" 
+                    <button @click="setFilter('unread')" 
                             :class="currentFilter === 'unread' ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
                             class="px-3 py-2 rounded-lg text-xs font-medium transition-colors">
-                        🔔 Okunmayanlar
+                        🔔 Okunmayanlar (<span x-text="chatStats.unread">0</span>)
                     </button>
-                    <button @click="currentFilter = 'replied'; loadChats()" 
+                    <button @click="setFilter('replied')" 
                             :class="currentFilter === 'replied' ? 'bg-purple-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
                             class="px-3 py-2 rounded-lg text-xs font-medium transition-colors">
-                        ✅ Konuştuklarımız
+                        ✅ Konuştuklarımız (<span x-text="chatStats.replied">0</span>)
                     </button>
                 </div>
                 
@@ -57,7 +57,7 @@
             </div>
 
             <!-- Chats -->
-            <div class="flex-1 overflow-y-auto">
+            <div class="flex-1 overflow-y-auto" @scroll="handleChatScroll($event)">
                 <template x-for="chatItem in filteredChats" :key="chatItem.phone">
                     <button @click="selectChat(chatItem)" 
                             :class="selectedPhone === chatItem.phone ? 'bg-green-50 border-l-4 border-green-500' : 'hover:bg-gray-50'"
@@ -81,12 +81,23 @@
                     </button>
                 </template>
                 
+                <!-- Loading More -->
+                <div x-show="loadingMoreChats" class="p-4 text-center">
+                    <div class="inline-block animate-spin rounded-full h-6 w-6 border-4 border-gray-300 border-t-green-500"></div>
+                    <p class="text-sm text-gray-600 mt-2">Yükleniyor...</p>
+                </div>
+                
                 <!-- Empty State -->
-                <div x-show="filteredChats.length === 0" class="p-8 text-center">
+                <div x-show="!loadingMoreChats && filteredChats.length === 0" class="p-8 text-center">
                     <svg class="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
                     </svg>
                     <p class="text-gray-500">Henüz mesaj yok</p>
+                </div>
+                
+                <!-- End of list -->
+                <div x-show="!hasMoreChats && filteredChats.length > 0" class="p-4 text-center text-gray-500 text-sm">
+                    — Tüm chat'ler yüklendi —
                 </div>
             </div>
         </div>
@@ -438,6 +449,15 @@ function chat() {
         searchQuery: '',
         contactSearchQuery: '',
         currentFilter: 'all',
+        currentPage: 1,
+        hasMoreChats: false,
+        loadingMoreChats: false,
+        chatStats: {
+            all: 0,
+            incoming: 0,
+            unread: 0,
+            replied: 0
+        },
         selectedPhone: null,
         selectedChat: null,
         selectedProduct: null,
@@ -463,6 +483,7 @@ function chat() {
         notificationPermission: false,
         
         init() {
+            this.loadChatStats();
             this.loadChats();
             this.loadContacts();
             this.loadTemplates();
@@ -471,6 +492,45 @@ function chat() {
             this.requestNotificationPermission();
             setInterval(() => this.refreshMessages(), 5000); // Auto refresh every 5s
             setInterval(() => this.checkNewMessages(), 3000); // Check for new messages
+        },
+        
+        async loadChatStats() {
+            try {
+                const response = await fetch('/api/chats/stats');
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.chatStats = data.stats;
+                    console.log('📊 Chat stats:', data.stats);
+                }
+            } catch (error) {
+                console.error('Chat stats error:', error);
+            }
+        },
+        
+        setFilter(filter) {
+            this.currentFilter = filter;
+            this.currentPage = 1;
+            this.chats = [];
+            this.loadChats();
+        },
+        
+        async handleChatScroll(event) {
+            const element = event.target;
+            const scrollTop = element.scrollTop;
+            const scrollHeight = element.scrollHeight;
+            const clientHeight = element.clientHeight;
+            
+            // Dibe yakın mı? (%90)
+            const threshold = scrollHeight * 0.9;
+            
+            if (scrollTop + clientHeight >= threshold) {
+                if (this.hasMoreChats && !this.loadingMoreChats) {
+                    console.log('📥 Loading more chats...');
+                    this.currentPage++;
+                    await this.loadChats(true); // append = true
+                }
+            }
         },
         
         async requestNotificationPermission() {
@@ -482,18 +542,40 @@ function chat() {
             }
         },
         
-        async loadChats() {
+        async loadChats(append = false) {
+            if (this.loadingMoreChats) return;
+            
+            this.loadingMoreChats = true;
+            
             try {
-                const response = await fetch(`/api/chats?filter=${this.currentFilter}`);
+                const params = new URLSearchParams({
+                    filter: this.currentFilter,
+                    page: this.currentPage,
+                    limit: 20
+                });
+                
+                const response = await fetch(`/api/chats?${params}`);
                 const data = await response.json();
                 
                 if (data.success) {
-                    this.chats = data.chats;
+                    if (append) {
+                        // Infinite scroll - append
+                        this.chats = [...this.chats, ...data.chats];
+                    } else {
+                        // Fresh load - replace
+                        this.chats = data.chats;
+                    }
+                    
+                    this.hasMoreChats = data.has_next;
                     this.filterChats();
+                    
+                    console.log(`📊 Loaded page ${data.page}/${data.total_pages} (${data.chats.length} chats)`);
                 }
             } catch (error) {
                 console.error('Chat yükleme hatası:', error);
-                this.chats = [];
+                if (!append) this.chats = [];
+            } finally {
+                this.loadingMoreChats = false;
             }
         },
         
