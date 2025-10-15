@@ -19,6 +19,7 @@ def register_blueprints(app):
     from .templates import templates_bp
     from .messages import messages_bp
     from .pages import pages_bp
+    from .legacy import legacy_bp
     
     # Blueprint'leri kaydet
     app.register_blueprint(auth_bp)
@@ -32,5 +33,6 @@ def register_blueprints(app):
     app.register_blueprint(templates_bp)
     app.register_blueprint(messages_bp)
     app.register_blueprint(pages_bp)
+    app.register_blueprint(legacy_bp)
     
     print("✅ All blueprints registered")
