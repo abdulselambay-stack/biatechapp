@@ -270,17 +270,19 @@ function dashboard() {
         
         async loadStats() {
             try {
-                const response = await fetch('/api/dashboard/stats');
+                const response = await fetch('/api/analytics/stats?time_range=all');
                 const data = await response.json();
                 
                 if (data.success) {
-                    // Map API response to dashboard stats
+                    console.log('📊 API Response:', data);
+                    
+                    // Use actual data from API
                     this.stats = {
-                        total_contacts: data.stats.total_contacts,
-                        sent: data.stats.total_messages,
-                        delivered: Math.round(data.stats.total_messages * (data.stats.success_rate / 100)),
-                        read: Math.round(data.stats.total_messages * (data.stats.success_rate / 100) * 0.85), // Estimate
-                        failed: data.stats.total_messages - Math.round(data.stats.total_messages * (data.stats.success_rate / 100))
+                        total_contacts: data.stats.total_contacts || 0,
+                        sent: data.stats.sent_messages || 0,
+                        delivered: data.stats.delivered_messages || 0,
+                        read: data.stats.read_messages || 0,
+                        failed: data.stats.failed_messages || 0
                     };
                     
                     console.log('✅ Dashboard stats loaded:', this.stats);
