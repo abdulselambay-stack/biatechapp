@@ -377,7 +377,7 @@ class ProductModel:
     
     @staticmethod
     def create_product(name: str, cost_price: float, sale_price: float, 
-                       description: str = "", category: str = "") -> Dict:
+                       description: str = "", category: str = "", currency: str = "TRY") -> Dict:
         """Yeni ürün oluştur"""
         profit = float(sale_price) - float(cost_price)
         profit_margin = (profit / float(sale_price) * 100) if sale_price > 0 else 0
@@ -388,6 +388,7 @@ class ProductModel:
             "sale_price": float(sale_price),  # Satış fiyatı
             "profit": profit,  # Kar
             "profit_margin": round(profit_margin, 2),  # Kar marjı %
+            "currency": currency,  # TRY veya USD
             "description": description,
             "category": category,
             "is_active": True,
@@ -430,7 +431,7 @@ class ProductModel:
     @staticmethod
     def update_product(product_id: str, name: str, cost_price: float, 
                        sale_price: float, description: str = "", 
-                       category: str = "") -> bool:
+                       category: str = "", currency: str = "TRY") -> bool:
         """Ürün güncelle"""
         from bson import ObjectId
         
@@ -445,6 +446,7 @@ class ProductModel:
                 "sale_price": float(sale_price),
                 "profit": profit,
                 "profit_margin": round(profit_margin, 2),
+                "currency": currency,
                 "description": description,
                 "category": category,
                 "updated_at": datetime.utcnow()

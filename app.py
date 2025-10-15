@@ -1730,6 +1730,7 @@ def api_create_product():
         sale_price = data.get("sale_price")
         description = data.get("description", "")
         category = data.get("category", "")
+        currency = data.get("currency", "TRY")
         
         if not name or cost_price is None or sale_price is None:
             return jsonify({"success": False, "error": "Ürün adı, geliş ve satış fiyatı gerekli"}), 400
@@ -1739,10 +1740,11 @@ def api_create_product():
             cost_price=float(cost_price),
             sale_price=float(sale_price),
             description=description,
-            category=category
+            category=category,
+            currency=currency
         )
         
-        logger.info(f"✅ Ürün oluşturuldu: {name} - Kar: {product['profit']} TRY")
+        logger.info(f"✅ Ürün oluşturuldu: {name} - Kar: {product['profit']} {product['currency']}")
         
         return jsonify({
             "success": True,
@@ -1783,6 +1785,7 @@ def api_update_product(product_id):
         sale_price = data.get("sale_price")
         description = data.get("description", "")
         category = data.get("category", "")
+        currency = data.get("currency", "TRY")
         
         if not name or cost_price is None or sale_price is None:
             return jsonify({"success": False, "error": "Ürün adı, geliş ve satış fiyatı gerekli"}), 400
@@ -1793,7 +1796,8 @@ def api_update_product(product_id):
             cost_price=float(cost_price),
             sale_price=float(sale_price),
             description=description,
-            category=category
+            category=category,
+            currency=currency
         )
         
         if success:

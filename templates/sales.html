@@ -191,61 +191,117 @@
             </div>
 
             <form @submit.prevent="saveSale()" class="space-y-4">
-                <div class="grid grid-cols-2 gap-4">
-                    <div class="col-span-2">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Müşteri Seç *</label>
-                        <select x-model="formData.phone" required
-                                @change="selectCustomer()"
-                                class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
-                            <option value="">Seçiniz...</option>
-                            <template x-for="contact in contacts" :key="contact.phone">
-                                <option :value="contact.phone" x-text="`${contact.name} (${contact.phone})`"></option>
+                <!-- Customer Search -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Müşteri Seç *</label>
+                    <div class="relative">
+                        <input type="text" 
+                               x-model="customerSearch"
+                               @input="filterCustomers()"
+                               @focus="showCustomerDropdown = true"
+                               placeholder="Müşteri adı veya telefon ara..."
+                               required
+                               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
+                        
+                        <!-- Dropdown -->
+                        <div x-show="showCustomerDropdown && filteredCustomers.length > 0" 
+                             @click.outside="showCustomerDropdown = false"
+                             class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                            <template x-for="contact in filteredCustomers.slice(0, 50)" :key="contact.phone">
+                                <button type="button"
+                                        @click="selectCustomer(contact)"
+                                        class="w-full px-4 py-3 text-left hover:bg-green-50 border-b border-gray-100 last:border-0">
+                                    <p class="font-medium text-gray-900" x-text="contact.name"></p>
+                                    <p class="text-sm text-gray-500" x-text="contact.phone"></p>
+                                </button>
                             </template>
-                        </select>
+                        </div>
                     </div>
+                    
+                    <!-- Selected Customer -->
+                    <div x-show="formData.customer_name" class="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p class="text-sm text-blue-900">
+                            <strong x-text="formData.customer_name"></strong>
+                            <span class="text-blue-600 ml-2" x-text="formData.phone"></span>
+                        </p>
+                    </div>
+                </div>
 
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Satış Tutarı ($) *</label>
-                        <input type="number" x-model="formData.amount" required step="0.01" min="0"
-                               placeholder="1000.00"
-                               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
-                    </div>
+                <!-- Product Selection -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Ürün Seç *</label>
+                    <select x-model="formData.product_id" @change="updateProductCalculation()" required
+                            class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
+                        <option value="">Ürün seçiniz...</option>
+                        <template x-for="product in products" :key="product._id">
+                            <option :value="product._id">
+                                <span x-text="product.name"></span> - 
+                                <span x-text="product.sale_price"></span>
+                                <span x-text="product.currency === 'USD' ? '$' : '₺'"></span>
+                            </option>
+                        </template>
+                    </select>
+                </div>
 
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Kar ($) *</label>
-                        <input type="number" x-model="formData.profit" required step="0.01" min="0"
-                               placeholder="250.00"
-                               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
-                    </div>
+                <!-- Quantity -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Adet *</label>
+                    <input type="number" x-model="formData.quantity" @input="updateProductCalculation()" 
+                           required min="1" placeholder="1"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
+                </div>
 
-                    <div class="col-span-2">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Ürün/Hizmet</label>
-                        <input type="text" x-model="formData.product"
-                               placeholder="iPhone 15 Pro"
-                               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
+                <!-- Product Info (when selected) -->
+                <div x-show="selectedProduct" class="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-2">
+                    <h4 class="font-semibold text-gray-900 mb-3">Ürün Bilgileri</h4>
+                    <div class="grid grid-cols-2 gap-3 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Birim Fiyat:</span>
+                            <span class="font-medium">
+                                <span x-text="selectedProduct?.sale_price"></span>
+                                <span x-text="selectedProduct?.currency === 'USD' ? '$' : '₺'"></span>
+                            </span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Birim Kar:</span>
+                            <span class="font-medium text-green-600">
+                                <span x-text="selectedProduct?.profit.toFixed(2)"></span>
+                                <span x-text="selectedProduct?.currency === 'USD' ? '$' : '₺'"></span>
+                            </span>
+                        </div>
+                        <div class="flex justify-between col-span-2">
+                            <span class="text-gray-600">Kar Marjı:</span>
+                            <span class="font-medium text-purple-600" x-text="selectedProduct?.profit_margin + '%'"></span>
+                        </div>
                     </div>
+                </div>
 
-                    <div class="col-span-2">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Notlar</label>
-                        <textarea x-model="formData.notes" rows="3"
-                                  placeholder="Ek bilgiler..."
-                                  class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500"></textarea>
-                    </div>
+                <!-- Notes -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Notlar</label>
+                    <textarea x-model="formData.notes" rows="2"
+                              placeholder="Ek bilgiler..."
+                              class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 resize-none"></textarea>
                 </div>
 
                 <!-- Sale Summary -->
                 <div class="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-4">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-sm text-gray-600">Satış Tutarı:</span>
-                        <span class="font-bold text-blue-600">$<span x-text="formData.amount || 0"></span></span>
-                    </div>
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-sm text-gray-600">Kar:</span>
-                        <span class="font-bold text-green-600">$<span x-text="formData.profit || 0"></span></span>
-                    </div>
-                    <div class="flex items-center justify-between pt-2 border-t border-green-200">
-                        <span class="text-sm font-semibold text-gray-700">Kar Marjı:</span>
-                        <span class="font-bold text-purple-600" x-text="calculateMargin() + '%'"></span>
+                    <h4 class="font-semibold text-gray-900 mb-3">Satış Özeti</h4>
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-600">Toplam Tutar:</span>
+                            <span class="font-bold text-blue-600">
+                                <span x-text="calculateTotal()"></span>
+                                <span x-text="selectedProduct?.currency === 'USD' ? '$' : '₺'"></span>
+                            </span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-600">Toplam Kar:</span>
+                            <span class="font-bold text-green-600">
+                                <span x-text="calculateTotalProfit()"></span>
+                                <span x-text="selectedProduct?.currency === 'USD' ? '$' : '₺'"></span>
+                            </span>
+                        </div>
                     </div>
                 </div>
 
@@ -325,16 +381,20 @@ function sales() {
     return {
         sales: [],
         contacts: [],
+        products: [],
+        filteredCustomers: [],
         topCustomers: [],
         showAddModal: false,
         showViewModal: false,
+        showCustomerDropdown: false,
         selectedSale: null,
+        selectedProduct: null,
+        customerSearch: '',
         formData: {
             phone: '',
             customer_name: '',
-            amount: '',
-            profit: '',
-            product: '',
+            product_id: '',
+            quantity: 1,
             notes: ''
         },
         stats: {
@@ -347,6 +407,7 @@ function sales() {
         init() {
             this.loadSales();
             this.loadContacts();
+            this.loadProducts();
             this.loadStats();
         },
         
@@ -370,9 +431,25 @@ function sales() {
                 
                 if (data.success) {
                     this.contacts = data.contacts;
+                    this.filteredCustomers = data.contacts;
+                    console.log(`✅ ${this.contacts.length} kişi yüklendi`);
                 }
             } catch (error) {
                 console.error('Kişiler yükleme hatası:', error);
+            }
+        },
+        
+        async loadProducts() {
+            try {
+                const response = await fetch('/api/products');
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.products = data.products;
+                    console.log(`✅ ${this.products.length} ürün yüklendi`);
+                }
+            } catch (error) {
+                console.error('Ürün yükleme hatası:', error);
             }
         },
         
@@ -394,27 +471,47 @@ function sales() {
             this.formData = {
                 phone: '',
                 customer_name: '',
-                amount: '',
-                profit: '',
-                product: '',
+                product_id: '',
+                quantity: 1,
                 notes: ''
             };
+            this.customerSearch = '';
+            this.selectedProduct = null;
+            this.filteredCustomers = this.contacts;
             this.showAddModal = true;
         },
         
-        selectCustomer() {
-            const contact = this.contacts.find(c => c.phone === this.formData.phone);
-            if (contact) {
-                this.formData.customer_name = contact.name;
-            }
+        filterCustomers() {
+            const query = this.customerSearch.toLowerCase();
+            this.filteredCustomers = this.contacts.filter(c => 
+                c.name.toLowerCase().includes(query) || 
+                c.phone.includes(query)
+            );
+            this.showCustomerDropdown = true;
         },
         
-        calculateMargin() {
-            const amount = parseFloat(this.formData.amount) || 0;
-            const profit = parseFloat(this.formData.profit) || 0;
-            
-            if (amount === 0) return 0;
-            return ((profit / amount) * 100).toFixed(1);
+        selectCustomer(contact) {
+            this.formData.phone = contact.phone;
+            this.formData.customer_name = contact.name;
+            this.customerSearch = `${contact.name} (${contact.phone})`;
+            this.showCustomerDropdown = false;
+        },
+        
+        updateProductCalculation() {
+            const product = this.products.find(p => p._id === this.formData.product_id);
+            this.selectedProduct = product || null;
+        },
+        
+        calculateTotal() {
+            if (!this.selectedProduct) return '0.00';
+            const quantity = parseInt(this.formData.quantity) || 1;
+            return (this.selectedProduct.sale_price * quantity).toFixed(2);
+        },
+        
+        calculateTotalProfit() {
+            if (!this.selectedProduct) return '0.00';
+            const quantity = parseInt(this.formData.quantity) || 1;
+            return (this.selectedProduct.profit * quantity).toFixed(2);
         },
         
         async saveSale() {
@@ -422,7 +519,13 @@ function sales() {
                 const response = await fetch('/api/sales', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(this.formData)
+                    body: JSON.stringify({
+                        phone: this.formData.phone,
+                        customer_name: this.formData.customer_name,
+                        product_id: this.formData.product_id,
+                        quantity: this.formData.quantity,
+                        notes: this.formData.notes
+                    })
                 });
                 
                 const data = await response.json();
