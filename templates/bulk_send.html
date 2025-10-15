@@ -27,16 +27,30 @@
         <form @submit.prevent="sendBulk()" class="space-y-6">
             
             <!-- Template Selection -->
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Template Seç *</label>
-                <select x-model="formData.template_name" required
-                        @change="loadRecipientStats()"
-                        class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
-                    <option value="">Seçiniz...</option>
-                    <template x-for="template in templates" :key="template.name">
-                        <option :value="template.name" x-text="`${template.name} (${template.language})`"></option>
-                    </template>
-                </select>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Template Seç *</label>
+                    <select x-model="formData.template_name" required
+                            @change="loadRecipientStats()"
+                            class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
+                        <option value="">Seçiniz...</option>
+                        <template x-for="template in templates" :key="template.name">
+                            <option :value="template.name" x-text="`${template.name} (${template.language})`"></option>
+                        </template>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Header Image ID (Opsiyonel)
+                        <span class="text-xs text-gray-500 font-normal">- Template'de image varsa</span>
+                    </label>
+                    <input type="text" 
+                           x-model="formData.header_image_id" 
+                           placeholder="Örn: 1234567890"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
+                    <p class="text-xs text-gray-500 mt-1">Boş bırakılırsa image gönderilmez</p>
+                </div>
             </div>
 
             <!-- Limit Selection -->
@@ -232,6 +246,7 @@ function bulkSend() {
         templates: [],
         formData: {
             template_name: '',
+            header_image_id: '',
             limit_type: 'all',
             limit: null
         },
@@ -342,7 +357,8 @@ function bulkSend() {
             try {
                 const payload = {
                     template_name: this.formData.template_name,
-                    limit: this.formData.limit_type === 'custom' ? this.formData.limit : null
+                    limit: this.formData.limit_type === 'custom' ? this.formData.limit : null,
+                    header_image_id: this.formData.header_image_id || ''
                 };
                 
                 // AbortController for cancellation
@@ -418,6 +434,7 @@ function bulkSend() {
         resetForm() {
             this.formData = {
                 template_name: '',
+                header_image_id: '',
                 limit_type: 'all',
                 limit: null
             };

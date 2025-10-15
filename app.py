@@ -205,8 +205,8 @@ def send_template_message(phone_number: str, template_name: str, language_code: 
         }
     }
     
-    # Header image parametresi varsa ekle
-    if header_image_id:
+    # Header image parametresi varsa ekle (boş string değilse)
+    if header_image_id and header_image_id.strip():
         payload["template"]["components"] = [
             {
                 "type": "header",
@@ -214,12 +214,13 @@ def send_template_message(phone_number: str, template_name: str, language_code: 
                     {
                         "type": "image",
                         "image": {
-                            "id": header_image_id
+                            "id": header_image_id.strip()
                         }
                     }
                 ]
             }
         ]
+        logger.info(f"Template with image header: {header_image_id}")
     
     try:
         response = requests.post(WHATSAPP_API_URL, headers=headers, json=payload, timeout=10)
@@ -2206,6 +2207,7 @@ def api_bulk_send():
         
         template_name = data.get("template_name")
         limit = data.get("limit")
+        header_image_id = data.get("header_image_id", "")  # Opsiyonel image ID
         
         if not template_name:
             return jsonify({"success": False, "error": "template_name gerekli"}), 400
@@ -2247,8 +2249,8 @@ def api_bulk_send():
                 logger.warning(f"⏭️  Skipped (already sent): {name} ({phone})")
                 continue
             
-            # Mesaj gönder
-            result = send_template_message(phone, template_name, language_code="tr")
+            # Mesaj gönder (image_id ile)
+            result = send_template_message(phone, template_name, language_code="tr", header_image_id=header_image_id)
             
             if result["success"]:
                 # ✅ BAŞARILI - template geçmişine ekle
