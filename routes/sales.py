@@ -78,6 +78,8 @@ def api_create_sale():
         quantity = data.get("quantity", 1)
         notes = data.get("notes", "")
         
+        logger.info(f"Creating sale - phone: {phone}, product: {product_id}, quantity: {quantity} (type: {type(quantity)})")
+        
         if not phone or not product_id:
             return jsonify({"success": False, "error": "Telefon ve ürün seçimi gerekli"}), 400
         
@@ -85,6 +87,9 @@ def api_create_sale():
         if not customer_name:
             contact = ContactModel.get_contact(phone)
             customer_name = contact['name'] if contact else phone
+        
+        # Quantity'yi int'e çevir
+        quantity = int(quantity) if quantity else 1
         
         sale = SalesModel.create_sale(
             phone=phone,
@@ -99,8 +104,11 @@ def api_create_sale():
             "sale": sale,
             "message": "Satış kaydedildi"
         })
+    except ValueError as ve:
+        logger.error(f"Value error in create sale: {ve}")
+        return jsonify({"success": False, "error": str(ve)}), 400
     except Exception as e:
-        logger.error(f"Create sale error: {e}")
+        logger.error(f"Create sale error: {e}", exc_info=True)
         return jsonify({"success": False, "error": str(e)}), 500
 
 @sales_bp.route("/api/sales/<sale_id>", methods=["PUT"])

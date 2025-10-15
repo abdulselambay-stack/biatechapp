@@ -750,6 +750,9 @@ class SalesModel:
         """Yeni satış kaydı oluştur (tier pricing destekli)"""
         from bson import ObjectId
         
+        # Quantity'yi int'e çevir (API'den string gelebilir)
+        quantity = int(quantity) if quantity else 1
+        
         # Ürün bilgisini çek
         product = ProductModel.get_product_by_id(product_id)
         
@@ -758,8 +761,8 @@ class SalesModel:
         
         # Miktara göre uygun fiyatı bul
         tier_pricing = SalesModel.get_tier_pricing(product, quantity)
-        unit_cost = tier_pricing['cost_price']
-        unit_sale = tier_pricing['sale_price']
+        unit_cost = float(tier_pricing['cost_price'])
+        unit_sale = float(tier_pricing['sale_price'])
         
         # Hesaplamalar
         total_cost = unit_cost * quantity
