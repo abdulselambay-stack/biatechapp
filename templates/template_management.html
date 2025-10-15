@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+
+{% block title %}Şablon Yönetimi - WhatsApp Cloud API{% endblock %}
+{% block page_title %}Şablon Yönetimi{% endblock %}
+{% block page_subtitle %}Template'lere resim yükle ve image ID yönet{% endblock %}
+
+{% block content %}
+<div class="space-y-6" x-data="templateManagement()">
+    
+    <!-- Templates List -->
+    <div class="bg-white rounded-2xl shadow-lg border border-gray-100">
+        <div class="p-6 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-bold text-gray-900">📋 Şablonlar</h3>
+                <button @click="loadTemplates()" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors">
+                    🔄 Yenile
+                </button>
+            </div>
+        </div>
+
+        <div class="p-6">
+            <div x-show="loading" class="text-center py-12">
+                <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-300 border-t-green-500"></div>
+                <p class="text-gray-600 mt-4">Şablonlar yükleniyor...</p>
+            </div>
+
+            <div x-show="!loading && templates.length === 0" class="text-center py-12">
+                <p class="text-gray-500">Henüz onaylanmış şablon yok</p>
+            </div>
+
+            <div x-show="!loading && templates.length > 0" class="grid grid-cols-1 gap-4">
+                <template x-for="template in templates" :key="template.name">
+                    <div class="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all">
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1">
+                                <h4 class="font-bold text-gray-900" x-text="template.name"></h4>
+                                <p class="text-sm text-gray-600 mt-1" x-text="template.language"></p>
+                                <span class="inline-block mt-2 px-2 py-1 text-xs font-medium rounded-full"
+                                      :class="{
+                                          'bg-green-100 text-green-700': template.status === 'APPROVED',
+                                          'bg-yellow-100 text-yellow-700': template.status === 'PENDING',
+                                          'bg-red-100 text-red-700': template.status === 'REJECTED'
+                                      }"
+                                      x-text="template.status">
+                                </span>
+                            </div>
+                            
+                            <div class="flex gap-2">
+                                <button @click="editTemplate(template)" 
+                                        class="px-4 py-2 bg-purple-50 hover:bg-purple-100 text-purple-600 rounded-lg text-sm font-medium transition-colors">
+                                    🖼️ Resim Yönet
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Current Image ID -->
+                        <div x-show="template.image_id" class="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                            <p class="text-xs text-green-700 font-medium">📷 Kayıtlı Image ID:</p>
+                            <p class="text-sm text-green-900 font-mono mt-1" x-text="template.image_id"></p>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div x-show="showModal" 
+         x-cloak
+         @click.self="showModal = false"
+         class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+         x-transition>
+        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full" @click.stop>
+            <div class="flex items-center justify-between p-6 border-b border-gray-200">
+                <h3 class="text-xl font-bold text-gray-900">🖼️ Image Yönetimi</h3>
+                <button @click="showModal = false" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Template</label>
+                    <input type="text" 
+                           x-model="selectedTemplate?.name" 
+                           readonly
+                           class="w-full px-4 py-3 bg-gray-100 border border-gray-300 rounded-xl">
+                </div>
+
+                <!-- Tab Selection -->
+                <div class="flex border-b border-gray-200">
+                    <button @click="activeTab = 'upload'"
+                            :class="activeTab === 'upload' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600'"
+                            class="flex-1 py-3 font-medium text-sm">
+                        📤 Resim Yükle
+                    </button>
+                    <button @click="activeTab = 'manual'"
+                            :class="activeTab === 'manual' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600'"
+                            class="flex-1 py-3 font-medium text-sm">
+                        ✍️ ID Gir
+                    </button>
+                </div>
+
+                <!-- Upload Tab -->
+                <div x-show="activeTab === 'upload'" class="space-y-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Image Dosyası</label>
+                        <input type="file" 
+                               @change="handleImageSelect($event)"
+                               accept="image/*"
+                               class="w-full px-4 py-3 border border-gray-300 rounded-xl">
+                        <p class="text-xs text-gray-500 mt-1">JPG, PNG, WEBP desteklenir</p>
+                    </div>
+                    
+                    <div x-show="selectedFile" class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <p class="text-sm text-blue-900">
+                            📎 <span x-text="selectedFile?.name"></span>
+                        </p>
+                    </div>
+                    
+                    <button @click="uploadImage()"
+                            :disabled="!selectedFile || uploading"
+                            :class="!selectedFile || uploading ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'"
+                            class="w-full px-4 py-3 text-white rounded-xl font-medium transition-colors">
+                        <span x-show="!uploading">Meta'ya Yükle ve Kaydet</span>
+                        <span x-show="uploading">Yükleniyor...</span>
+                    </button>
+                </div>
+
+                <!-- Manual ID Tab -->
+                <div x-show="activeTab === 'manual'" class="space-y-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Image ID</label>
+                        <input type="text" 
+                               x-model="manualImageId" 
+                               placeholder="Örn: 780517088218949"
+                               class="w-full px-4 py-3 border border-gray-300 rounded-xl">
+                        <p class="text-xs text-gray-500 mt-1">Meta'dan aldığınız image ID'yi girin</p>
+                    </div>
+                    
+                    <button @click="saveManualImageId()"
+                            :disabled="!manualImageId || saving"
+                            :class="!manualImageId || saving ? 'bg-gray-300 cursor-not-allowed' : 'bg-green-500 hover:bg-green-600'"
+                            class="w-full px-4 py-3 text-white rounded-xl font-medium transition-colors">
+                        <span x-show="!saving">Kaydet</span>
+                        <span x-show="saving">Kaydediliyor...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function templateManagement() {
+    return {
+        templates: [],
+        loading: false,
+        showModal: false,
+        selectedTemplate: null,
+        activeTab: 'upload',
+        selectedFile: null,
+        uploading: false,
+        manualImageId: '',
+        saving: false,
+        
+        init() {
+            this.loadTemplates();
+        },
+        
+        async loadTemplates() {
+            this.loading = true;
+            try {
+                const response = await fetch('/api/templates');
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.templates = data.templates.filter(t => t.status === 'APPROVED');
+                    
+                    // Load saved image IDs
+                    for (const template of this.templates) {
+                        const settingsResponse = await fetch(`/api/template-settings/${template.name}`);
+                        const settingsData = await settingsResponse.json();
+                        
+                        if (settingsData.success && settingsData.settings.header_image_id) {
+                            template.image_id = settingsData.settings.header_image_id;
+                        }
+                    }
+                }
+            } catch (error) {
+                alert('❌ Hata: ' + error.message);
+            } finally {
+                this.loading = false;
+            }
+        },
+        
+        editTemplate(template) {
+            this.selectedTemplate = template;
+            this.manualImageId = template.image_id || '';
+            this.showModal = true;
+        },
+        
+        handleImageSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                this.selectedFile = file;
+            }
+        },
+        
+        async uploadImage() {
+            if (!this.selectedFile || !this.selectedTemplate) return;
+            
+            this.uploading = true;
+            try {
+                const formData = new FormData();
+                formData.append('file', this.selectedFile);
+                formData.append('template_name', this.selectedTemplate.name);
+                
+                const response = await fetch('/api/upload-whatsapp-image', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(`✅ Başarılı!\nImage ID: ${data.media_id}`);
+                    this.showModal = false;
+                    this.selectedFile = null;
+                    this.loadTemplates();
+                } else {
+                    alert(`❌ Hata: ${data.error}`);
+                }
+            } catch (error) {
+                alert(`❌ Bağlantı hatası: ${error.message}`);
+            } finally {
+                this.uploading = false;
+            }
+        },
+        
+        async saveManualImageId() {
+            if (!this.manualImageId || !this.selectedTemplate) return;
+            
+            this.saving = true;
+            try {
+                const response = await fetch('/api/template-settings/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        template_name: this.selectedTemplate.name,
+                        image_id: this.manualImageId
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(`✅ Image ID kaydedildi!`);
+                    this.showModal = false;
+                    this.manualImageId = '';
+                    this.loadTemplates();
+                } else {
+                    alert(`❌ Hata: ${data.error}`);
+                }
+            } catch (error) {
+                alert(`❌ Bağlantı hatası: ${error.message}`);
+            } finally {
+                this.saving = false;
+            }
+        }
+    }
+}
+</script>
+{% endblock %}

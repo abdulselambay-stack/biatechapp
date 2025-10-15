@@ -637,9 +637,15 @@ def analytics_page():
 
 @app.route("/settings")
 @login_required
-def settings_page():
+def settings():
     """Ayarlar sayfası"""
     return render_template("settings.html")
+
+@app.route("/template-management")
+@login_required
+def template_management():
+    """Şablon yönetimi sayfası"""
+    return render_template("template_management.html")
 
 @app.route("/chat")
 @login_required
@@ -2533,6 +2539,28 @@ def api_upload_whatsapp_image():
         logger.error(f"Image upload error: {e}")
         import traceback
         logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/template-settings/save", methods=["POST"])
+@login_required
+def api_save_template_settings():
+    """Template settings kaydet"""
+    try:
+        data = request.get_json()
+        template_name = data.get("template_name")
+        image_id = data.get("image_id")
+        
+        if not template_name or not image_id:
+            return jsonify({"success": False, "error": "template_name ve image_id gerekli"}), 400
+        
+        success = TemplateSettingsModel.set_header_image_id(template_name, image_id)
+        
+        if success:
+            return jsonify({"success": True, "message": "Image ID kaydedildi"})
+        else:
+            return jsonify({"success": False, "error": "Kaydetme başarısız"}), 500
+    except Exception as e:
+        logger.error(f"Save template settings error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route("/api/template-settings/<template_name>", methods=["GET"])
