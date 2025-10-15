@@ -316,16 +316,16 @@
         </div>
     </div>
     
-    <!-- Bulk Send Logs Modal -->
+    <!-- All Contacts Status Modal -->
     <div x-show="showBulkSendLogsModal" 
          x-cloak
          @click.self="showBulkSendLogsModal = false"
          class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
          x-transition>
-        <div class="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[85vh] flex flex-col" @click.stop>
-            <div class="flex items-center justify-between p-6 border-b border-gray-200">
-                <h3 class="text-xl font-bold text-gray-900">📋 Toplu Gönderim Logları</h3>
-                <button @click="showBulkSendLogsModal = false" class="text-gray-400 hover:text-gray-600">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] flex flex-col" @click.stop>
+            <div class="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-t-2xl">
+                <h3 class="text-xl font-bold">📊 Tüm Contactların Template Durumu</h3>
+                <button @click="showBulkSendLogsModal = false" class="text-white hover:text-gray-200">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                     </svg>
@@ -333,94 +333,139 @@
             </div>
             
             <!-- Stats Summary -->
-            <div x-show="logStats.total > 0" class="p-4 bg-gray-50 border-b border-gray-200">
-                <div class="mb-3 text-center" x-show="logStats.showing < logStats.total">
-                    <p class="text-xs text-amber-700 bg-amber-50 inline-block px-3 py-1 rounded-full">
-                        ℹ️ Toplam <span class="font-bold" x-text="logStats.total">0</span> kayıt var, son <span class="font-bold" x-text="logStats.showing">0</span> tanesi gösteriliyor
-                    </p>
-                </div>
-                <div class="grid grid-cols-5 gap-3">
-                    <div class="bg-white rounded-lg p-3 text-center">
-                        <p class="text-xs text-gray-500">Toplam Kayıt</p>
-                        <p class="text-2xl font-bold text-gray-900" x-text="logStats.total">0</p>
+            <div x-show="allContactsStats.total > 0" class="p-4 bg-gray-50 border-b border-gray-200">
+                <div class="grid grid-cols-3 gap-4">
+                    <div class="bg-white rounded-xl p-4 text-center border-2 border-blue-200">
+                        <p class="text-xs text-gray-500 mb-1">Toplam Contact</p>
+                        <p class="text-3xl font-bold text-blue-600" x-text="allContactsStats.total">0</p>
                     </div>
-                    <div class="bg-green-50 rounded-lg p-3 text-center border border-green-200">
-                        <p class="text-xs text-green-700">Gönderildi</p>
-                        <p class="text-2xl font-bold text-green-600" x-text="logStats.sent">0</p>
+                    <div class="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 text-center border-2 border-green-300">
+                        <p class="text-xs text-green-700 mb-1">✅ Gönderildi</p>
+                        <p class="text-3xl font-bold text-green-600" x-text="allContactsStats.sent">0</p>
                     </div>
-                    <div class="bg-blue-50 rounded-lg p-3 text-center border border-blue-200">
-                        <p class="text-xs text-blue-700">İletildi</p>
-                        <p class="text-2xl font-bold text-blue-600" x-text="logStats.delivered">0</p>
-                    </div>
-                    <div class="bg-purple-50 rounded-lg p-3 text-center border border-purple-200">
-                        <p class="text-xs text-purple-700">Okundu</p>
-                        <p class="text-2xl font-bold text-purple-600" x-text="logStats.read">0</p>
-                    </div>
-                    <div class="bg-red-50 rounded-lg p-3 text-center border border-red-200">
-                        <p class="text-xs text-red-700">Başarısız</p>
-                        <p class="text-2xl font-bold text-red-600" x-text="logStats.failed">0</p>
+                    <div class="bg-gradient-to-br from-red-50 to-orange-50 rounded-xl p-4 text-center border-2 border-red-300">
+                        <p class="text-xs text-red-700 mb-1">❌ Gönderilmedi</p>
+                        <p class="text-3xl font-bold text-red-600" x-text="allContactsStats.not_sent">0</p>
                     </div>
                 </div>
             </div>
             
             <div class="p-6 overflow-y-auto flex-1">
-                <div class="mb-4 flex gap-3 flex-wrap">
-                    <select x-model="logFilter" @change="loadBulkSendLogs()" 
-                            class="px-4 py-2 border border-gray-300 rounded-lg">
-                        <option value="">Tüm Template'ler</option>
+                <!-- Filters -->
+                <div class="mb-4 flex gap-3 flex-wrap items-center">
+                    <select x-model="contactStatusFilter" @change="loadAllContactsStatus()" 
+                            class="px-4 py-2 border border-gray-300 rounded-lg font-medium">
+                        <option value="">Template Seç</option>
                         <template x-for="template in templates" :key="template.name">
                             <option :value="template.name" x-text="template.name"></option>
                         </template>
                     </select>
                     
-                    <select x-model="logLimit" @change="loadBulkSendLogs()" 
-                            class="px-4 py-2 border border-gray-300 rounded-lg">
-                        <option value="100">Son 100</option>
-                        <option value="300">Son 300</option>
-                        <option value="500">Son 500</option>
-                        <option value="1000">Son 1000</option>
-                        <option value="all">Tümü</option>
-                    </select>
+                    <input type="text" 
+                           x-model="contactSearchTerm" 
+                           @input="filterAllContacts()"
+                           placeholder="🔍 İsim veya telefon ara..."
+                           class="flex-1 px-4 py-2 border border-gray-300 rounded-lg">
                     
-                    <button @click="loadBulkSendLogs()" 
-                            class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors">
-                        🔄 Yenile
-                    </button>
+                    <div class="flex gap-2">
+                        <button @click="contactFilterType = null; filterAllContacts()" 
+                                :class="contactFilterType === null ? 'bg-gray-600 text-white' : 'bg-gray-100 text-gray-700'"
+                                class="px-4 py-2 rounded-lg font-medium transition-colors">
+                            Tümü
+                        </button>
+                        <button @click="contactFilterType = true; filterAllContacts()" 
+                                :class="contactFilterType === true ? 'bg-green-600 text-white' : 'bg-green-100 text-green-700'"
+                                class="px-4 py-2 rounded-lg font-medium transition-colors">
+                            ✅ Gönderildi
+                        </button>
+                        <button @click="contactFilterType = false; filterAllContacts()" 
+                                :class="contactFilterType === false ? 'bg-red-600 text-white' : 'bg-red-100 text-red-700'"
+                                class="px-4 py-2 rounded-lg font-medium transition-colors">
+                            ❌ Gönderilmedi
+                        </button>
+                    </div>
                 </div>
                 
-                <div x-show="loadingLogs" class="text-center py-8">
-                    <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-300 border-t-green-500"></div>
-                    <p class="text-gray-600 mt-2">Yükleniyor...</p>
+                <!-- Loading -->
+                <div x-show="loadingAllContacts" class="text-center py-12">
+                    <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-300 border-t-blue-500"></div>
+                    <p class="text-gray-600 mt-3 font-medium">Contactlar yükleniyor...</p>
                 </div>
                 
-                <div x-show="!loadingLogs && bulkSendLogs.length === 0" class="text-center py-8">
-                    <p class="text-gray-500">Henüz gönderim log'u yok</p>
+                <!-- No Template Selected -->
+                <div x-show="!loadingAllContacts && !contactStatusFilter" class="text-center py-12">
+                    <svg class="w-16 h-16 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                    <p class="text-gray-500 font-medium">Lütfen bir template seçin</p>
                 </div>
                 
-                <div x-show="!loadingLogs && bulkSendLogs.length > 0" class="space-y-2">
-                    <template x-for="log in bulkSendLogs" :key="log.phone + log.sent_at">
-                        <div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                            <div class="flex-1">
-                                <p class="font-medium text-gray-900" x-text="log.name"></p>
-                                <p class="text-sm text-gray-600" x-text="log.phone"></p>
+                <!-- Empty Results -->
+                <div x-show="!loadingAllContacts && contactStatusFilter && filteredAllContacts.length === 0" class="text-center py-12">
+                    <svg class="w-16 h-16 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+                    </svg>
+                    <p class="text-gray-500 font-medium">Sonuç bulunamadı</p>
+                </div>
+                
+                <!-- Contacts Table -->
+                <div x-show="!loadingAllContacts && contactStatusFilter && filteredAllContacts.length > 0">
+                    <div class="mb-3 text-sm text-gray-600">
+                        Gösterilen: <span class="font-bold" x-text="filteredAllContacts.length"></span> contact
+                    </div>
+                    
+                    <div class="space-y-1.5">
+                        <template x-for="(contact, index) in filteredAllContacts" :key="contact.phone">
+                            <div class="flex items-center gap-3 p-3 rounded-lg border-2 transition-all hover:shadow-md"
+                                 :class="{
+                                     'bg-gradient-to-r from-green-50 to-emerald-50 border-green-300': contact.sent,
+                                     'bg-white border-gray-200 hover:border-gray-300': !contact.sent
+                                 }">
+                                <!-- Index -->
+                                <div class="w-12 text-center">
+                                    <div class="text-sm font-bold rounded-full w-8 h-8 flex items-center justify-center mx-auto"
+                                         :class="contact.sent ? 'bg-green-200 text-green-800' : 'bg-gray-200 text-gray-600'"
+                                         x-text="index + 1"></div>
+                                </div>
+                                
+                                <!-- Status Icon -->
+                                <div class="w-10">
+                                    <span x-show="contact.sent" class="text-2xl">✅</span>
+                                    <span x-show="!contact.sent" class="text-2xl">❌</span>
+                                </div>
+                                
+                                <!-- Contact Info -->
+                                <div class="flex-1">
+                                    <p class="font-bold text-gray-900" x-text="contact.name"></p>
+                                    <p class="text-sm text-gray-600" x-text="contact.phone"></p>
+                                </div>
+                                
+                                <!-- Status Badge -->
+                                <div class="text-center px-4">
+                                    <span class="px-3 py-1.5 text-xs font-bold rounded-full"
+                                          :class="{
+                                              'bg-green-200 text-green-800': contact.status === 'sent',
+                                              'bg-blue-200 text-blue-800': contact.status === 'delivered',
+                                              'bg-purple-200 text-purple-800': contact.status === 'read',
+                                              'bg-red-200 text-red-800': contact.status === 'failed',
+                                              'bg-gray-200 text-gray-700': contact.status === 'not_sent'
+                                          }"
+                                          x-text="contact.status === 'sent' ? '📤 Gönderildi' : 
+                                                  contact.status === 'delivered' ? '✅ Teslim Edildi' : 
+                                                  contact.status === 'read' ? '👁️ Okundu' : 
+                                                  contact.status === 'failed' ? '❌ Başarısız' : 
+                                                  '⏳ Henüz Gönderilmedi'">
+                                    </span>
+                                </div>
+                                
+                                <!-- Date -->
+                                <div class="text-right w-40">
+                                    <p class="text-xs text-gray-500" x-text="contact.sent_at ? formatDateTime(contact.sent_at) : '-'"></p>
+                                    <p class="text-xs text-gray-400" x-text="contact.country || ''"></p>
+                                </div>
                             </div>
-                            <div class="text-center px-4">
-                                <span class="px-3 py-1 text-xs font-medium rounded-full"
-                                      :class="{
-                                          'bg-green-100 text-green-700': log.status === 'sent',
-                                          'bg-blue-100 text-blue-700': log.status === 'delivered',
-                                          'bg-purple-100 text-purple-700': log.status === 'read',
-                                          'bg-red-100 text-red-700': log.status === 'failed'
-                                      }"
-                                      x-text="log.status === 'sent' ? 'Gönderildi' : log.status === 'delivered' ? 'İletildi' : log.status === 'read' ? 'Okundu' : 'Başarısız'">
-                                </span>
-                            </div>
-                            <div class="text-right">
-                                <p class="text-xs font-medium text-gray-700" x-text="log.template_name"></p>
-                                <p class="text-xs text-gray-500" x-text="formatDateTime(log.sent_at)"></p>
-                            </div>
-                        </div>
-                    </template>
+                        </template>
+                    </div>
                 </div>
             </div>
         </div>
@@ -467,16 +512,16 @@ function bulkSend() {
             skipped: 0
         },
         showBulkSendLogsModal: false,
-        bulkSendLogs: [],
-        loadingLogs: false,
-        logFilter: '',
-        logLimit: '300',
-        logStats: {
+        allContactsData: [],
+        filteredAllContacts: [],
+        loadingAllContacts: false,
+        contactStatusFilter: '',
+        contactSearchTerm: '',
+        contactFilterType: null, // null, true, false
+        allContactsStats: {
             total: 0,
             sent: 0,
-            delivered: 0,
-            read: 0,
-            failed: 0
+            not_sent: 0
         },
         
         init() {
@@ -737,41 +782,56 @@ function bulkSend() {
             this.showResults = false;
         },
         
-        async loadBulkSendLogs() {
-            this.loadingLogs = true;
+        async loadAllContactsStatus() {
+            if (!this.contactStatusFilter) {
+                this.allContactsData = [];
+                this.filteredAllContacts = [];
+                return;
+            }
+            
+            this.loadingAllContacts = true;
             try {
-                const params = new URLSearchParams();
-                if (this.logFilter) {
-                    params.append('template_name', this.logFilter);
-                }
-                
-                // Limit: all = 10000, diğerleri sayısal
-                const limitValue = this.logLimit === 'all' ? '10000' : this.logLimit;
-                params.append('limit', limitValue);
-                
-                const response = await fetch(`/api/bulk-send/logs?${params}`);
+                const response = await fetch(`/api/bulk-send/template-status?template_name=${this.contactStatusFilter}`);
                 const data = await response.json();
                 
                 if (data.success) {
-                    this.bulkSendLogs = data.logs;
-                    
-                    // Calculate statistics
-                    this.logStats = {
-                        total: data.total || data.logs.length,  // Gerçek toplam
-                        showing: data.showing || data.logs.length,  // Gösterilen
-                        sent: data.logs.filter(l => l.status === 'sent').length,
-                        delivered: data.logs.filter(l => l.status === 'delivered').length,
-                        read: data.logs.filter(l => l.status === 'read').length,
-                        failed: data.logs.filter(l => l.status === 'failed').length
-                    };
+                    this.allContactsData = data.contacts;
+                    this.allContactsStats = data.stats;
+                    this.filterAllContacts();
                 } else {
-                    alert('❌ Log yükleme hatası: ' + data.error);
+                    alert('Hata: ' + data.error);
                 }
             } catch (error) {
-                alert('❌ Bağlantı hatası: ' + error.message);
+                console.error('Load contacts status error:', error);
+                alert('Bağlantı hatası: ' + error.message);
             } finally {
-                this.loadingLogs = false;
+                this.loadingAllContacts = false;
             }
+        },
+        
+        filterAllContacts() {
+            let filtered = this.allContactsData;
+            
+            // Filter by sent/not sent
+            if (this.contactFilterType !== null) {
+                filtered = filtered.filter(c => c.sent === this.contactFilterType);
+            }
+            
+            // Search by name or phone
+            if (this.contactSearchTerm) {
+                const term = this.contactSearchTerm.toLowerCase();
+                filtered = filtered.filter(c => 
+                    c.name.toLowerCase().includes(term) ||
+                    c.phone.includes(term)
+                );
+            }
+            
+            this.filteredAllContacts = filtered;
+        },
+        
+        async loadBulkSendLogs() {
+            // Eski fonksiyon - artık template status kullanıyoruz
+            await this.loadAllContactsStatus();
         },
         
         formatDateTime(dateString) {
