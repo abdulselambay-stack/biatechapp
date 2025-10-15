@@ -572,25 +572,41 @@ class ProductModel:
         return get_database()['products']
     
     @staticmethod
-    def create_product(name: str, cost_price: float, sale_price: float, 
-                       description: str = "", category: str = "", currency: str = "TRY") -> Dict:
-        """Yeni ürün oluştur"""
-        profit = float(sale_price) - float(cost_price)
-        profit_margin = (profit / float(sale_price) * 100) if sale_price > 0 else 0
+    def create_product(name: str, cost_price: float = None, sale_price: float = None, 
+                       description: str = "", category: str = "", currency: str = "USD",
+                       pricing_tiers: list = None, use_tier_pricing: bool = False) -> Dict:
+        """Yeni ürün oluştur (basit veya tier pricing)"""
         
         product = {
             "name": name,
-            "cost_price": float(cost_price),  # Geliş fiyatı
-            "sale_price": float(sale_price),  # Satış fiyatı
-            "profit": profit,  # Kar
-            "profit_margin": round(profit_margin, 2),  # Kar marjı %
-            "currency": currency,  # TRY veya USD
+            "currency": currency,
             "description": description,
             "category": category,
+            "use_tier_pricing": use_tier_pricing,
             "is_active": True,
             "created_at": datetime.utcnow(),
             "updated_at": datetime.utcnow()
         }
+        
+        if use_tier_pricing and pricing_tiers:
+            # Tier pricing modu
+            product["pricing_tiers"] = pricing_tiers
+            # İlk tier'ı default olarak kullan
+            if pricing_tiers:
+                first_tier = pricing_tiers[0]
+                product["cost_price"] = float(first_tier.get('cost_price', 0))
+                product["sale_price"] = float(first_tier.get('sale_price', 0))
+        else:
+            # Basit mod
+            product["cost_price"] = float(cost_price) if cost_price else 0
+            product["sale_price"] = float(sale_price) if sale_price else 0
+            product["pricing_tiers"] = []
+        
+        # Kar hesaplama
+        profit = product["sale_price"] - product["cost_price"]
+        profit_margin = (profit / product["sale_price"] * 100) if product["sale_price"] > 0 else 0
+        product["profit"] = profit
+        product["profit_margin"] = round(profit_margin, 2)
         
         result = ProductModel.get_collection().insert_one(product)
         product['_id'] = str(result.inserted_id)
@@ -625,28 +641,41 @@ class ProductModel:
         return product
     
     @staticmethod
-    def update_product(product_id: str, name: str, cost_price: float, 
-                       sale_price: float, description: str = "", 
-                       category: str = "", currency: str = "TRY") -> bool:
+    def update_product(product_id: str, name: str, cost_price: float = None, 
+                       sale_price: float = None, description: str = "", 
+                       category: str = "", currency: str = "USD",
+                       pricing_tiers: list = None, use_tier_pricing: bool = False) -> bool:
         """Ürün güncelle"""
         from bson import ObjectId
         
-        profit = float(sale_price) - float(cost_price)
-        profit_margin = (profit / float(sale_price) * 100) if sale_price > 0 else 0
+        update_data = {
+            "name": name,
+            "currency": currency,
+            "description": description,
+            "category": category,
+            "use_tier_pricing": use_tier_pricing,
+            "updated_at": datetime.utcnow()
+        }
+        
+        if use_tier_pricing and pricing_tiers:
+            update_data["pricing_tiers"] = pricing_tiers
+            if pricing_tiers:
+                first_tier = pricing_tiers[0]
+                update_data["cost_price"] = float(first_tier.get('cost_price', 0))
+                update_data["sale_price"] = float(first_tier.get('sale_price', 0))
+        else:
+            update_data["cost_price"] = float(cost_price) if cost_price else 0
+            update_data["sale_price"] = float(sale_price) if sale_price else 0
+            update_data["pricing_tiers"] = []
+        
+        profit = update_data["sale_price"] - update_data["cost_price"]
+        profit_margin = (profit / update_data["sale_price"] * 100) if update_data["sale_price"] > 0 else 0
+        update_data["profit"] = profit
+        update_data["profit_margin"] = round(profit_margin, 2)
         
         result = ProductModel.get_collection().update_one(
             {"_id": ObjectId(product_id)},
-            {"$set": {
-                "name": name,
-                "cost_price": float(cost_price),
-                "sale_price": float(sale_price),
-                "profit": profit,
-                "profit_margin": round(profit_margin, 2),
-                "currency": currency,
-                "description": description,
-                "category": category,
-                "updated_at": datetime.utcnow()
-            }}
+            {"$set": update_data}
         )
         
         return result.modified_count > 0
@@ -670,9 +699,37 @@ class SalesModel:
         return get_database()['sales']
     
     @staticmethod
+    def get_tier_pricing(product: Dict, quantity: int) -> Dict:
+        """Miktara göre uygun tier fiyatını bul"""
+        if not product.get('use_tier_pricing') or not product.get('pricing_tiers'):
+            return {
+                'cost_price': product.get('cost_price', 0),
+                'sale_price': product.get('sale_price', 0)
+            }
+        
+        # Tier'ları sırala (min_quantity'ye göre azalan)
+        tiers = sorted(product['pricing_tiers'], 
+                      key=lambda x: x.get('min_quantity', 0), 
+                      reverse=True)
+        
+        # Uygun tier'ı bul
+        for tier in tiers:
+            if quantity >= tier.get('min_quantity', 0):
+                return {
+                    'cost_price': float(tier.get('cost_price', 0)),
+                    'sale_price': float(tier.get('sale_price', 0))
+                }
+        
+        # Hiçbiri uymazsa ilk tier
+        return {
+            'cost_price': product.get('cost_price', 0),
+            'sale_price': product.get('sale_price', 0)
+        }
+    
+    @staticmethod
     def create_sale(phone: str, customer_name: str, product_id: str, 
-                    quantity: int = 1, notes: str = "", currency: str = "TRY") -> Dict:
-        """Yeni satış kaydı oluştur (ürün bazlı)"""
+                    quantity: int = 1, notes: str = "") -> Dict:
+        """Yeni satış kaydı oluştur (tier pricing destekli)"""
         from bson import ObjectId
         
         # Ürün bilgisini çek
@@ -681,10 +738,16 @@ class SalesModel:
         if not product:
             raise ValueError("Ürün bulunamadı")
         
+        # Miktara göre uygun fiyatı bul
+        tier_pricing = SalesModel.get_tier_pricing(product, quantity)
+        unit_cost = tier_pricing['cost_price']
+        unit_sale = tier_pricing['sale_price']
+        
         # Hesaplamalar
-        total_cost = product['cost_price'] * quantity
-        total_sale = product['sale_price'] * quantity
+        total_cost = unit_cost * quantity
+        total_sale = unit_sale * quantity
         total_profit = total_sale - total_cost
+        profit_margin = (total_profit / total_sale * 100) if total_sale > 0 else 0
         
         sale = {
             "phone": phone,
@@ -692,17 +755,17 @@ class SalesModel:
             "product_id": product_id,
             "product_name": product['name'],
             "quantity": quantity,
-            "unit_cost_price": product['cost_price'],
-            "unit_sale_price": product['sale_price'],
+            "unit_cost_price": round(unit_cost, 2),
+            "unit_sale_price": round(unit_sale, 2),
             "total_cost": round(total_cost, 2),
-            "total_amount": round(total_sale, 2),  # Toplam satış tutarı
-            "total_profit": round(total_profit, 2),   # Kar
-            "profit_margin": product['profit_margin'],
-            "currency": currency,
+            "total_amount": round(total_sale, 2),
+            "total_profit": round(total_profit, 2),
+            "profit_margin": round(profit_margin, 2),
+            "currency": product.get('currency', 'USD'),
             "notes": notes,
             "sale_date": datetime.utcnow(),
             "created_at": datetime.utcnow(),
-            "status": "completed"  # completed, pending, cancelled
+            "status": "completed"
         }
         
         result = SalesModel.get_collection().insert_one(sale)
@@ -751,34 +814,59 @@ class SalesModel:
     
     @staticmethod
     def get_sales_stats() -> Dict:
-        """Satış istatistikleri"""
-        pipeline = [
+        """Satış istatistikleri (currency bazlı)"""
+        # Genel istatistikler
+        pipeline_all = [
             {
                 "$group": {
                     "_id": None,
-                    "total_sales": {"$sum": 1},
-                    "total_amount": {"$sum": "$amount"},
-                    "total_profit": {"$sum": "$profit"},
-                    "avg_sale": {"$avg": "$amount"},
-                    "avg_profit": {"$avg": "$profit"}
+                    "total_sales_count": {"$sum": 1},
+                    "total_quantity": {"$sum": "$quantity"}
                 }
             }
         ]
         
-        result = list(SalesModel.get_collection().aggregate(pipeline))
+        # Currency bazlı istatistikler
+        pipeline_by_currency = [
+            {
+                "$group": {
+                    "_id": "$currency",
+                    "total_amount": {"$sum": "$total_amount"},
+                    "total_profit": {"$sum": "$total_profit"},
+                    "total_cost": {"$sum": "$total_cost"},
+                    "count": {"$sum": 1},
+                    "avg_sale": {"$avg": "$total_amount"},
+                    "avg_profit": {"$avg": "$total_profit"}
+                }
+            }
+        ]
         
-        if result:
-            stats = result[0]
-            stats.pop('_id')
-            return stats
+        result_all = list(SalesModel.get_collection().aggregate(pipeline_all))
+        result_by_currency = list(SalesModel.get_collection().aggregate(pipeline_by_currency))
         
-        return {
-            "total_sales": 0,
-            "total_amount": 0,
-            "total_profit": 0,
-            "avg_sale": 0,
-            "avg_profit": 0
+        stats = {
+            "total_sales_count": 0,
+            "total_quantity": 0,
+            "by_currency": {}
         }
+        
+        if result_all:
+            stats["total_sales_count"] = result_all[0].get("total_sales_count", 0)
+            stats["total_quantity"] = result_all[0].get("total_quantity", 0)
+        
+        # Currency bazlı verileri ekle
+        for currency_stat in result_by_currency:
+            currency = currency_stat.pop('_id')
+            stats["by_currency"][currency] = {
+                "total_amount": round(currency_stat.get("total_amount", 0), 2),
+                "total_profit": round(currency_stat.get("total_profit", 0), 2),
+                "total_cost": round(currency_stat.get("total_cost", 0), 2),
+                "count": currency_stat.get("count", 0),
+                "avg_sale": round(currency_stat.get("avg_sale", 0), 2),
+                "avg_profit": round(currency_stat.get("avg_profit", 0), 2)
+            }
+        
+        return stats
     
     @staticmethod
     def get_top_customers(limit: int = 10) -> List[Dict]:

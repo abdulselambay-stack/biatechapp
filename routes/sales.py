@@ -24,30 +24,27 @@ def api_get_sales():
     try:
         sales = SalesModel.get_all_sales()
         
-        # Contact ve product bilgilerini ekle
-        for sale in sales:
-            # Contact bilgisi
-            contact = ContactModel.get_contact(sale['phone'])
-            if contact:
-                sale['contact_name'] = contact['name']
-            else:
-                sale['contact_name'] = sale['phone']
-            
-            # Product bilgisi
-            product = ProductModel.get_product(sale['product_id'])
-            if product:
-                sale['product_name'] = product['name']
-                sale['product_price'] = product['price']
-            else:
-                sale['product_name'] = "Unknown"
-                sale['product_price'] = 0
-        
         return jsonify({
             "success": True,
             "sales": sales
         })
     except Exception as e:
         logger.error(f"Get sales error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@sales_bp.route("/api/sales/stats", methods=["GET"])
+@login_required
+def api_get_sales_stats():
+    """Satış istatistiklerini getir"""
+    try:
+        stats = SalesModel.get_sales_stats()
+        
+        return jsonify({
+            "success": True,
+            "stats": stats
+        })
+    except Exception as e:
+        logger.error(f"Get sales stats error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 @sales_bp.route("/api/sales/<sale_id>", methods=["GET"])
@@ -71,23 +68,35 @@ def api_get_sale(sale_id):
 @sales_bp.route("/api/sales", methods=["POST"])
 @login_required
 def api_create_sale():
-    """Yeni satış ekle"""
+    """Yeni satış ekle (tier pricing destekli)"""
     try:
         data = request.get_json()
         
         phone = data.get("phone")
+        customer_name = data.get("customer_name", "")
         product_id = data.get("product_id")
         quantity = data.get("quantity", 1)
         notes = data.get("notes", "")
         
         if not phone or not product_id:
-            return jsonify({"success": False, "error": "phone ve product_id gerekli"}), 400
+            return jsonify({"success": False, "error": "Telefon ve ürün seçimi gerekli"}), 400
         
-        sale_id = SalesModel.create_sale(phone, product_id, quantity, notes)
+        # Customer name yoksa contact'tan çek
+        if not customer_name:
+            contact = ContactModel.get_contact(phone)
+            customer_name = contact['name'] if contact else phone
+        
+        sale = SalesModel.create_sale(
+            phone=phone,
+            customer_name=customer_name,
+            product_id=product_id,
+            quantity=quantity,
+            notes=notes
+        )
         
         return jsonify({
             "success": True,
-            "sale_id": sale_id,
+            "sale": sale,
             "message": "Satış kaydedildi"
         })
     except Exception as e:

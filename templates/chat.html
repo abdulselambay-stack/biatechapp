@@ -305,7 +305,9 @@
                             class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
                         <option value="">Ürün seçiniz...</option>
                         <template x-for="product in products" :key="product._id">
-                            <option :value="product._id" x-text="`${product.name} - ${product.sale_price} ₺`"></option>
+                            <option :value="product._id" 
+                                    x-text="`${product.name} - ${getCurrencySymbol(product.currency)}${product.sale_price}`">
+                            </option>
                         </template>
                     </select>
                 </div>
@@ -319,17 +321,26 @@
 
                 <!-- Product Info -->
                 <div x-show="selectedProduct" class="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-2">
+                    <template x-if="selectedProduct?.use_tier_pricing">
+                        <div class="mb-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+                            ⚡ Kademeli fiyatlandırma aktif - Miktar girdiğinizde fiyat otomatik hesaplanır
+                        </div>
+                    </template>
                     <div class="flex justify-between text-sm">
-                        <span class="text-gray-600">Birim Fiyat:</span>
-                        <span class="font-medium" x-text="selectedProduct?.sale_price + ' ₺'"></span>
+                        <span class="text-gray-600">Birim Satış:</span>
+                        <span class="font-medium" x-text="formatCurrency(saleCalculation.unit_sale_price, saleCalculation.currency)"></span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-600">Birim Alış:</span>
+                        <span class="font-medium text-gray-500" x-text="formatCurrency(saleCalculation.unit_cost_price, saleCalculation.currency)"></span>
                     </div>
                     <div class="flex justify-between text-sm">
                         <span class="text-gray-600">Birim Kar:</span>
-                        <span class="font-medium text-green-600" x-text="selectedProduct?.profit + ' ₺'"></span>
+                        <span class="font-medium text-green-600" x-text="formatCurrency(saleCalculation.unit_sale_price - saleCalculation.unit_cost_price, saleCalculation.currency)"></span>
                     </div>
                     <div class="flex justify-between text-sm">
                         <span class="text-gray-600">Kar Marjı:</span>
-                        <span class="font-medium text-purple-600" x-text="selectedProduct?.profit_margin + '%'"></span>
+                        <span class="font-medium text-purple-600" x-text="saleCalculation.profit_margin + '%'"></span>
                     </div>
                 </div>
 
@@ -341,14 +352,22 @@
                 </div>
 
                 <!-- Summary -->
-                <div class="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-4">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-sm text-gray-600">Toplam Tutar:</span>
-                        <span class="font-bold text-gray-900" x-text="calculateTotal() + ' ₺'">0 ₺</span>
+                <div class="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-4 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600">Miktar:</span>
+                        <span class="font-bold text-gray-700" x-text="saleData.quantity + ' adet'"></span>
                     </div>
                     <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600">Toplam Maliyet:</span>
+                        <span class="font-medium text-gray-600" x-text="formatCurrency(saleCalculation.total_cost, saleCalculation.currency)"></span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600">Toplam Tutar:</span>
+                        <span class="font-bold text-gray-900 text-lg" x-text="formatCurrency(saleCalculation.total_amount, saleCalculation.currency)"></span>
+                    </div>
+                    <div class="flex items-center justify-between pt-2 border-t border-green-300">
                         <span class="text-sm text-gray-600">Toplam Kar:</span>
-                        <span class="font-bold text-green-600" x-text="calculateTotalProfit() + ' ₺'">0 ₺</span>
+                        <span class="font-bold text-green-600 text-lg" x-text="formatCurrency(saleCalculation.total_profit, saleCalculation.currency)"></span>
                     </div>
                 </div>
 
@@ -472,6 +491,15 @@ function chat() {
             product_id: '',
             quantity: 1,
             notes: ''
+        },
+        saleCalculation: {
+            unit_cost_price: 0,
+            unit_sale_price: 0,
+            total_cost: 0,
+            total_amount: 0,
+            total_profit: 0,
+            profit_margin: 0,
+            currency: 'USD'
         },
         stats: {
             total_chats: 0,
@@ -751,24 +779,61 @@ function chat() {
             };
         },
         
-        updateSaleCalculation() {
+        async updateSaleCalculation() {
             const product = this.products.find(p => p._id === this.saleData.product_id);
             this.selectedProduct = product || null;
+            
+            if (!product) {
+                this.saleCalculation = {
+                    unit_cost_price: 0,
+                    unit_sale_price: 0,
+                    total_cost: 0,
+                    total_amount: 0,
+                    total_profit: 0,
+                    profit_margin: 0,
+                    currency: 'USD'
+                };
+                return;
+            }
+            
+            // Tier pricing API çağır
+            try {
+                const response = await fetch(`/api/products/${product._id}/calculate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        quantity: parseInt(this.saleData.quantity) || 1
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.saleCalculation = data;
+                } else {
+                    console.error('Price calculation error:', data.error);
+                }
+            } catch (error) {
+                console.error('Price calculation error:', error);
+            }
         },
         
-        calculateTotal() {
-            if (!this.selectedProduct) return '0.00';
-            const quantity = parseInt(this.saleData.quantity) || 1;
-            return (this.selectedProduct.sale_price * quantity).toFixed(2);
+        getCurrencySymbol(currency) {
+            return currency === 'USD' ? '$' : '₺';
         },
         
-        calculateTotalProfit() {
-            if (!this.selectedProduct) return '0.00';
-            const quantity = parseInt(this.saleData.quantity) || 1;
-            return (this.selectedProduct.profit * quantity).toFixed(2);
+        formatCurrency(amount, currency) {
+            if (!amount) amount = 0;
+            const symbol = this.getCurrencySymbol(currency || 'USD');
+            return `${symbol}${parseFloat(amount).toFixed(2)}`;
         },
         
         async saveSale() {
+            if (!this.saleData.product_id) {
+                alert('❌ Lütfen bir ürün seçin');
+                return;
+            }
+            
             try {
                 const response = await fetch('/api/sales', {
                     method: 'POST',
@@ -777,7 +842,7 @@ function chat() {
                         phone: this.selectedPhone,
                         customer_name: this.selectedChat?.name || this.selectedPhone,
                         product_id: this.saleData.product_id,
-                        quantity: this.saleData.quantity,
+                        quantity: parseInt(this.saleData.quantity) || 1,
                         notes: this.saleData.notes
                     })
                 });
@@ -785,12 +850,19 @@ function chat() {
                 const data = await response.json();
                 
                 if (data.success) {
-                    alert('✅ Satış kaydedildi!');
+                    const sale = data.sale;
+                    const msg = `✅ Satış kaydedildi!\n\nMüşteri: ${sale.customer_name}\nÜrün: ${sale.product_name}\nMiktar: ${sale.quantity} adet\nTutar: ${this.formatCurrency(sale.total_amount, sale.currency)}\nKar: ${this.formatCurrency(sale.total_profit, sale.currency)}`;
+                    alert(msg);
+                    
+                    // Reset form
+                    this.saleData = { product_id: '', quantity: 1, notes: '' };
+                    this.selectedProduct = null;
                     this.showSaleModal = false;
                 } else {
                     alert('❌ Hata: ' + data.error);
                 }
             } catch (error) {
+                console.error('Save sale error:', error);
                 alert('❌ Bağlantı hatası: ' + error.message);
             }
         },
