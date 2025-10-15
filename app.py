@@ -2144,27 +2144,27 @@ def api_bulk_send_preview():
     """Toplu gönderim öncesi istatistik"""
     try:
         template_name = request.args.get("template_name")
-        recipient_type = request.args.get("recipient_type", "all")
-        tags_str = request.args.get("tags", "")
+        limit_str = request.args.get("limit", "")
         
         if not template_name:
             return jsonify({"success": False, "error": "template_name gerekli"}), 400
         
-        tags = [t.strip() for t in tags_str.split(",") if t.strip()] if tags_str else None
-        
-        # Tüm uygun kişileri getir
-        if recipient_type == "all":
-            all_contacts = ContactModel.get_all_contacts(is_active=True)
-        else:
-            all_contacts = ContactModel.get_all_contacts(tags=tags, is_active=True)
+        # Tüm aktif kişileri getir
+        all_contacts = ContactModel.get_all_contacts(is_active=True)
         
         # Daha önce bu template'i almamış olanları filtrele
-        eligible_contacts = ContactModel.get_contacts_without_template(template_name, tags=tags if recipient_type == "tags" else None)
+        eligible_contacts = ContactModel.get_contacts_without_template(template_name)
+        
+        # Limit varsa uygula
+        will_send = len(eligible_contacts)
+        if limit_str and limit_str.isdigit():
+            limit = int(limit_str)
+            will_send = min(limit, len(eligible_contacts))
         
         stats = {
             "total_recipients": len(all_contacts),
             "already_sent": len(all_contacts) - len(eligible_contacts),
-            "will_send": len(eligible_contacts)
+            "will_send": will_send
         }
         
         return jsonify({
@@ -2178,22 +2178,18 @@ def api_bulk_send_preview():
 @app.route("/api/bulk-send", methods=["POST"])
 @login_required
 def api_bulk_send():
-    """Toplu mesaj gönderimi (duplicate kontrolü ile)"""
+    """Toplu mesaj gönderimi (duplicate kontrolü ile + detaylı log)"""
     try:
         data = request.get_json()
         
         template_name = data.get("template_name")
-        recipient_type = data.get("recipient_type", "all")
-        tags = data.get("tags", [])
+        limit = data.get("limit")
         
         if not template_name:
             return jsonify({"success": False, "error": "template_name gerekli"}), 400
         
         # Alıcıları belirle (daha önce almamış olanlar)
-        if recipient_type == "all":
-            recipients = ContactModel.get_contacts_without_template(template_name)
-        else:
-            recipients = ContactModel.get_contacts_without_template(template_name, tags=tags)
+        recipients = ContactModel.get_contacts_without_template(template_name)
         
         if not recipients:
             return jsonify({
@@ -2201,27 +2197,39 @@ def api_bulk_send():
                 "error": "Gönderilecek kişi bulunamadı (tümü daha önce almış)"
             }), 400
         
+        # Limit varsa uygula
+        if limit and isinstance(limit, int) and limit > 0:
+            recipients = recipients[:limit]
+        
         logger.info(f"🚀 Bulk send starting: {template_name} to {len(recipients)} recipients")
         
         # Gönderim yap
         success_count = 0
         failed_count = 0
         skipped_count = 0
+        details = []
         
         for contact in recipients:
             phone = contact["phone"]
+            name = contact.get("name", "Unknown")
             
             # Double check - tekrar kontrol
             if ContactModel.has_received_template(phone, template_name):
                 skipped_count += 1
-                logger.warning(f"⏭️  Skipped (already sent): {phone}")
+                details.append({
+                    "phone": phone,
+                    "name": name,
+                    "status": "skipped",
+                    "error": "Already sent"
+                })
+                logger.warning(f"⏭️  Skipped (already sent): {name} ({phone})")
                 continue
             
             # Mesaj gönder
             result = send_template_message(phone, template_name, language_code="tr")
             
             if result["success"]:
-                # Başarılı - template geçmişine ekle
+                # ✅ BAŞARILI - template geçmişine ekle
                 ContactModel.add_sent_template(phone, template_name)
                 MessageModel.create_message(
                     phone=phone,
@@ -2229,9 +2237,14 @@ def api_bulk_send():
                     status="sent"
                 )
                 success_count += 1
-                logger.info(f"✅ Sent to {phone}")
+                details.append({
+                    "phone": phone,
+                    "name": name,
+                    "status": "success"
+                })
+                logger.info(f"✅ Sent to {name} ({phone})")
             else:
-                # Başarısız
+                # ❌ BAŞARISIZ - template geçmişine EKLEME (önemli!)
                 MessageModel.create_message(
                     phone=phone,
                     template_name=template_name,
@@ -2239,7 +2252,13 @@ def api_bulk_send():
                     error_message=result.get("error", "Unknown error")
                 )
                 failed_count += 1
-                logger.error(f"❌ Failed to {phone}: {result.get('error')}")
+                details.append({
+                    "phone": phone,
+                    "name": name,
+                    "status": "failed",
+                    "error": result.get("error", "Unknown error")
+                })
+                logger.error(f"❌ Failed to {name} ({phone}): {result.get('error')}")
         
         logger.info(f"✅ Bulk send completed: {success_count} success, {failed_count} failed, {skipped_count} skipped")
         
@@ -2251,7 +2270,8 @@ def api_bulk_send():
                 "failed": failed_count,
                 "skipped": skipped_count,
                 "total": len(recipients)
-            }
+            },
+            "details": details  # Detaylı log
         })
     except Exception as e:
         logger.error(f"Bulk send error: {e}")
