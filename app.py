@@ -504,20 +504,11 @@ def receive_webhook():
                 error_msg = None
                 if status_type == "failed" and "errors" in status:
                     error_msg = str(status["errors"])
+                    logger.warning(f"   ⚠️  Failed message: {message_id} - {error_msg}")
                     
-                    # ÖNEMLİ: Failed mesajlar için sent_templates'den çıkar
-                    # Böylece tekrar gönderilebilir
-                    msg_doc = MessageModel.get_collection().find_one({"whatsapp_message_id": message_id})
-                    if msg_doc:
-                        template_name = msg_doc.get("template_name")
-                        phone = msg_doc.get("phone")
-                        if template_name and phone:
-                            # sent_templates'den çıkar
-                            ContactModel.get_collection().update_one(
-                                {"phone": phone},
-                                {"$pull": {"sent_templates": template_name}}
-                            )
-                            logger.warning(f"   ⚠️  Failed message - removed {template_name} from {phone} sent_templates (can retry)")
+                    # NOT: sent_templates'den ÇIKARMIYORUZ
+                    # Bir kez gönderildiyse, webhook failed gelse bile duplicate önlemek için
+                    # MessageModel status'ü failed olarak işaretlenir ama tekrar gönderilmez
                 
                 MessageModel.update_status(
                     message_id=message_id,
@@ -2361,16 +2352,39 @@ def api_bulk_send():
             phone = contact["phone"]
             name = contact.get("name", "Unknown")
             
-            # Double check - tekrar kontrol
+            # Triple check - sent_templates ve MessageModel'de kontrol
             if ContactModel.has_received_template(phone, template_name):
                 skipped_count += 1
                 details.append({
                     "phone": phone,
                     "name": name,
                     "status": "skipped",
-                    "error": "Already sent"
+                    "error": "Already sent (in sent_templates)"
                 })
-                logger.warning(f"⏭️  Skipped (already sent): {name} ({phone})")
+                logger.warning(f"⏭️  Skipped (in sent_templates): {name} ({phone})")
+                continue
+            
+            # MessageModel'de başarılı gönderim var mı kontrol et
+            existing_message = MessageModel.get_collection().find_one({
+                "phone": phone,
+                "template_name": template_name,
+                "status": {"$in": ["sent", "delivered", "read"]}
+            })
+            
+            if existing_message:
+                skipped_count += 1
+                details.append({
+                    "phone": phone,
+                    "name": name,
+                    "status": "skipped",
+                    "error": "Already sent (in messages)"
+                })
+                logger.warning(f"⏭️  Skipped (already in messages): {name} ({phone})")
+                
+                # Eğer sent_templates'de yoksa ekle (senkronize et)
+                if not ContactModel.has_received_template(phone, template_name):
+                    ContactModel.add_sent_template(phone, template_name)
+                    logger.info(f"   ✅ Synced to sent_templates")
                 continue
             
             # Progress log (her 10 mesajda bir)
