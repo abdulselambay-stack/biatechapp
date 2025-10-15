@@ -489,6 +489,20 @@ def receive_webhook():
                 error_msg = None
                 if status_type == "failed" and "errors" in status:
                     error_msg = str(status["errors"])
+                    
+                    # ÖNEMLİ: Failed mesajlar için sent_templates'den çıkar
+                    # Böylece tekrar gönderilebilir
+                    msg_doc = MessageModel.get_collection().find_one({"whatsapp_message_id": message_id})
+                    if msg_doc:
+                        template_name = msg_doc.get("template_name")
+                        phone = msg_doc.get("phone")
+                        if template_name and phone:
+                            # sent_templates'den çıkar
+                            ContactModel.get_collection().update_one(
+                                {"phone": phone},
+                                {"$pull": {"sent_templates": template_name}}
+                            )
+                            logger.warning(f"   ⚠️  Failed message - removed {template_name} from {phone} sent_templates (can retry)")
                 
                 MessageModel.update_status(
                     message_id=message_id,
