@@ -12,7 +12,7 @@ from typing import List, Dict, Set
 
 # MongoDB imports
 from database import get_database
-from models import ContactModel, MessageModel, SaleModel, ProductModel, TemplateSettingsModel, ChatModel, SalesModel, AdminModel
+from models import ContactModel, MessageModel, SalesModel, ProductModel, TemplateSettingsModel, ChatModel, AdminModel
 
 # .env dosyasını manuel yükle
 def load_env_file():
