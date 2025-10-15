@@ -135,44 +135,9 @@ def api_bulk_send():
             phone = contact["phone"]
             name = contact.get("name", "Unknown")
             
-            # Triple check - sent_templates ve MessageModel'de kontrol
-            if ContactModel.has_received_template(phone, template_name):
-                skipped_count += 1
-                details.append({
-                    "phone": phone,
-                    "name": name,
-                    "status": "skipped",
-                    "error": "Already sent (in sent_templates)"
-                })
-                logger.warning(f"⏭️  Skipped (in sent_templates): {name} ({phone})")
-                continue
-            
-            # MessageModel'de başarılı gönderim var mı kontrol et
-            existing_message = MessageModel.get_collection().find_one({
-                "phone": phone,
-                "template_name": template_name,
-                "status": {"$in": ["sent", "delivered", "read"]}
-            })
-            
-            if existing_message:
-                skipped_count += 1
-                details.append({
-                    "phone": phone,
-                    "name": name,
-                    "status": "skipped",
-                    "error": "Already sent (in messages)"
-                })
-                logger.warning(f"⏭️  Skipped (already in messages): {name} ({phone})")
-                
-                # Eğer sent_templates'de yoksa ekle (senkronize et)
-                if not ContactModel.has_received_template(phone, template_name):
-                    ContactModel.add_sent_template(phone, template_name)
-                    logger.info(f"   ✅ Synced to sent_templates")
-                continue
-            
             # Progress log (her 10 mesajda bir)
             if i % 10 == 0 or i == total_recipients:
-                logger.info(f"📊 Progress: {i}/{total_recipients} ({(i/total_recipients*100):.1f}%) - ✅ {success_count} ❌ {failed_count} ⏭️ {skipped_count}")
+                logger.info(f"📊 Progress: {i}/{total_recipients} ({(i/total_recipients*100):.1f}%) - ✅ {success_count} ❌ {failed_count}")
             
             # Mesaj gönder (image_id ile)
             result = send_template_message(phone, template_name, language_code="tr", header_image_id=header_image_id)
@@ -282,4 +247,97 @@ def api_bulk_send_logs():
         })
     except Exception as e:
         logger.error(f"Bulk send logs error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@bulk_send_bp.route("/api/bulk-send/template-status", methods=["GET"])
+@login_required
+def api_bulk_send_template_status():
+    """
+    Tüm contactlar için belirli bir template'in gönderilip gönderilmediğini göster
+    Kullanım: /api/bulk-send/template-status?template_name=sablon_6
+    """
+    try:
+        template_name = request.args.get("template_name")
+        
+        if not template_name:
+            return jsonify({"success": False, "error": "template_name gerekli"}), 400
+        
+        # Tüm aktif contact'ları getir
+        all_contacts = ContactModel.get_all_contacts(is_active=True)
+        
+        # MessageModel'de bu template için gönderim yapılmış telefonları al
+        messages_sent = MessageModel.get_collection().find({
+            "template_name": template_name,
+            "status": {"$in": ["sent", "delivered", "read"]}
+        })
+        
+        # Telefon -> message mapping oluştur
+        message_status_map = {}
+        for msg in messages_sent:
+            phone = msg.get("phone")
+            message_status_map[phone] = {
+                "status": msg.get("status"),
+                "sent_at": msg.get("sent_at").isoformat() if msg.get("sent_at") else None,
+                "message_id": str(msg.get("_id"))
+            }
+        
+        # Her contact için durum bilgisi hazırla
+        contact_statuses = []
+        sent_count = 0
+        not_sent_count = 0
+        
+        for contact in all_contacts:
+            phone = contact["phone"]
+            name = contact.get("name", "Unknown")
+            
+            # sent_templates veya MessageModel'de var mı kontrol et
+            has_in_sent_templates = template_name in contact.get("sent_templates", [])
+            has_in_messages = phone in message_status_map
+            
+            if has_in_sent_templates or has_in_messages:
+                # GÖNDERİLMİŞ
+                sent_count += 1
+                msg_info = message_status_map.get(phone, {})
+                
+                contact_statuses.append({
+                    "phone": phone,
+                    "name": name,
+                    "country": contact.get("country", ""),
+                    "tags": contact.get("tags", []),
+                    "sent": True,
+                    "status": msg_info.get("status", "sent"),
+                    "sent_at": msg_info.get("sent_at"),
+                    "source": "messages" if has_in_messages else "sent_templates"
+                })
+            else:
+                # GÖNDERİLMEMİŞ
+                not_sent_count += 1
+                contact_statuses.append({
+                    "phone": phone,
+                    "name": name,
+                    "country": contact.get("country", ""),
+                    "tags": contact.get("tags", []),
+                    "sent": False,
+                    "status": "not_sent",
+                    "sent_at": None,
+                    "source": None
+                })
+        
+        # Sent olanları önce göster, sonra not_sent
+        contact_statuses.sort(key=lambda x: (not x["sent"], x["name"]))
+        
+        return jsonify({
+            "success": True,
+            "template_name": template_name,
+            "stats": {
+                "total_contacts": len(all_contacts),
+                "sent": sent_count,
+                "not_sent": not_sent_count
+            },
+            "contacts": contact_statuses
+        })
+    except Exception as e:
+        logger.error(f"Template status error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return jsonify({"success": False, "error": str(e)}), 500

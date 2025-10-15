@@ -105,7 +105,10 @@ class ContactModel:
     
     @staticmethod
     def get_contacts_without_template(template_name: str, tags: List[str] = None) -> List[Dict]:
-        """Belirli template'i almamış kişileri getir"""
+        """
+        Belirli template'i almamış kişileri getir
+        Hem sent_templates hem de MessageModel'de kontrol eder
+        """
         query = {
             "is_active": True,
             "sent_templates": {"$ne": template_name}
@@ -113,10 +116,25 @@ class ContactModel:
         if tags:
             query["tags"] = {"$in": tags}
         
+        # sent_templates'de olmayan kişileri getir
         contacts = list(ContactModel.get_collection().find(query))
+        
+        # MessageModel'de başarılı gönderim yapılmış telefonları al
+        messages_collection = get_database()['messages']
+        messages_sent_phones = messages_collection.distinct("phone", {
+            "template_name": template_name,
+            "status": {"$in": ["sent", "delivered", "read"]}
+        })
+        messages_sent_set = set(messages_sent_phones)
+        
+        # MessageModel'de de olmayan kişileri filtrele
+        eligible_contacts = []
         for contact in contacts:
-            contact['_id'] = str(contact['_id'])
-        return contacts
+            if contact['phone'] not in messages_sent_set:
+                contact['_id'] = str(contact['_id'])
+                eligible_contacts.append(contact)
+        
+        return eligible_contacts
 
 
 class TemplateSettingsModel:
