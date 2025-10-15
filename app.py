@@ -2031,11 +2031,11 @@ def api_analytics_stats():
         else:  # all
             start_date = datetime(2020, 1, 1)
         
-        # Mesaj istatistikleri (sent_at kullan)
+        # Mesaj istatistikleri (sent_at kullan) - SADECE BAŞARILI MESAJLAR
         messages_pipeline = [
             {"$match": {
                 "sent_at": {"$gte": start_date},
-                "status": {"$in": ["sent", "delivered", "read", "failed"]}
+                "status": {"$in": ["sent", "delivered", "read"]}  # Failed HARİÇ
             }},
             {"$group": {
                 "_id": "$status",
@@ -2050,9 +2050,14 @@ def api_analytics_stats():
         sent_messages = stats_dict.get('sent', 0)
         delivered_messages = stats_dict.get('delivered', 0)
         read_messages = stats_dict.get('read', 0)
-        failed_messages = stats_dict.get('failed', 0)
         
-        total_messages = sent_messages + delivered_messages + read_messages + failed_messages
+        total_messages = sent_messages + delivered_messages + read_messages
+        
+        # Failed mesajları ayrı say (gösterim için)
+        failed_messages = MessageModel.get_collection().count_documents({
+            "sent_at": {"$gte": start_date},
+            "status": "failed"
+        })
         
         # Toplam kişi sayısı
         total_contacts = ContactModel.get_collection().count_documents({})
