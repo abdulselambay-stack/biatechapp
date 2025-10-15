@@ -399,15 +399,17 @@ class ChatModel:
         return list(reversed(chats))  # Eskiden yeniye sırala
     
     @staticmethod
-    def get_all_chats(filter_type: str = "all") -> List[Dict]:
+    def get_all_chats(filter_type: str = "all", page: int = 1, limit: int = 20) -> Dict:
         """
-        Tüm chat'leri telefon numarasına göre grupla
+        Tüm chat'leri telefon numarasına göre grupla (pagination ile)
         
         filter_type:
         - "all": Tüm konuşmalar
         - "incoming": Bize mesaj atanlar (incoming message var)
         - "unread": Okunmayanlar (last message incoming ve unread)
         - "replied": Bizim cevap verdiklerimiz (incoming + outgoing var)
+        
+        Returns: {chats: [], total: int, page: int, total_pages: int}
         """
         pipeline = [
             {"$sort": {"timestamp": -1}},
@@ -461,7 +463,76 @@ class ChatModel:
             elif filter_type == "replied" and chat['has_replied']:
                 filtered_chats.append(chat)
         
-        return filtered_chats
+        # Pagination
+        total = len(filtered_chats)
+        total_pages = (total + limit - 1) // limit  # Ceil division
+        start = (page - 1) * limit
+        end = start + limit
+        paginated_chats = filtered_chats[start:end]
+        
+        return {
+            "chats": paginated_chats,
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "total_pages": total_pages,
+            "has_next": page < total_pages
+        }
+    
+    @staticmethod
+    def get_chat_stats() -> Dict:
+        """
+        Chat istatistiklerini getir
+        Returns: {
+            "all": total_count,
+            "incoming": incoming_count,
+            "unread": unread_count,
+            "replied": replied_count
+        }
+        """
+        pipeline = [
+            {"$sort": {"timestamp": -1}},
+            {"$group": {
+                "_id": "$phone",
+                "unread_count": {
+                    "$sum": {
+                        "$cond": [
+                            {"$and": [
+                                {"$eq": ["$direction", "incoming"]},
+                                {"$eq": ["$is_read", False]}
+                            ]},
+                            1,
+                            0
+                        ]
+                    }
+                },
+                "incoming_count": {
+                    "$sum": {"$cond": [{"$eq": ["$direction", "incoming"]}, 1, 0]}
+                },
+                "outgoing_count": {
+                    "$sum": {"$cond": [{"$eq": ["$direction", "outgoing"]}, 1, 0]}
+                }
+            }}
+        ]
+        
+        chats = list(ChatModel.get_collection().aggregate(pipeline))
+        
+        stats = {
+            "all": len(chats),
+            "incoming": 0,
+            "unread": 0,
+            "replied": 0
+        }
+        
+        for chat in chats:
+            if chat['incoming_count'] > 0:
+                stats['incoming'] += 1
+            if chat['unread_count'] > 0:
+                stats['unread'] += 1
+            if chat['incoming_count'] > 0 and chat['outgoing_count'] > 0:
+                stats['replied'] += 1
+        
+        return stats
     
     @staticmethod
     def mark_messages_as_read(phone: str):

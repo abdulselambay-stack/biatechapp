@@ -20,17 +20,22 @@ def chat_page():
 @chat_bp.route("/api/chats", methods=["GET"])
 def api_get_chats():
     """
-    Tüm chat'leri getir (MongoDB)
+    Tüm chat'leri getir (MongoDB, pagination)
     
     Query params:
     - filter: all (default), incoming, unread, replied
+    - page: sayfa numarası (default: 1)
+    - limit: sayfa başına chat sayısı (default: 20)
     """
     try:
         filter_type = request.args.get('filter', 'all')
-        chats = ChatModel.get_all_chats(filter_type=filter_type)
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 20))
+        
+        result = ChatModel.get_all_chats(filter_type=filter_type, page=page, limit=limit)
         
         # Her chat için contact bilgisini ekle
-        for chat in chats:
+        for chat in result['chats']:
             contact = ContactModel.get_contact(chat['phone'])
             if contact:
                 chat['name'] = contact['name']
@@ -39,11 +44,33 @@ def api_get_chats():
         
         return jsonify({
             "success": True,
-            "chats": chats,
+            "chats": result['chats'],
+            "total": result['total'],
+            "page": result['page'],
+            "limit": result['limit'],
+            "total_pages": result['total_pages'],
+            "has_next": result['has_next'],
             "filter": filter_type
         })
     except Exception as e:
         logger.error(f"Get chats error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@chat_bp.route("/api/chats/stats", methods=["GET"])
+def api_get_chat_stats():
+    """
+    Chat istatistiklerini getir
+    Returns: {all: X, incoming: X, unread: X, replied: X}
+    """
+    try:
+        stats = ChatModel.get_chat_stats()
+        
+        return jsonify({
+            "success": True,
+            "stats": stats
+        })
+    except Exception as e:
+        logger.error(f"Get chat stats error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 @chat_bp.route("/api/chat/<phone>", methods=["GET"])
