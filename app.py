@@ -636,6 +636,12 @@ def products_page():
     """Ürünler sayfası"""
     return render_template("products.html")
 
+@app.route("/bulk-send")
+@login_required
+def bulk_send_page():
+    """Toplu mesaj gönderimi sayfası"""
+    return render_template("bulk_send.html")
+
 @app.route("/uploads/<filename>")
 def serve_upload(filename):
     """Upload edilmiş dosyaları serve et"""
@@ -2128,6 +2134,129 @@ def api_get_templates():
             
     except Exception as e:
         logger.error(f"Template fetch error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# ==================== BULK SEND API ENDPOINTS ====================
+
+@app.route("/api/bulk-send/preview", methods=["GET"])
+@login_required
+def api_bulk_send_preview():
+    """Toplu gönderim öncesi istatistik"""
+    try:
+        template_name = request.args.get("template_name")
+        recipient_type = request.args.get("recipient_type", "all")
+        tags_str = request.args.get("tags", "")
+        
+        if not template_name:
+            return jsonify({"success": False, "error": "template_name gerekli"}), 400
+        
+        tags = [t.strip() for t in tags_str.split(",") if t.strip()] if tags_str else None
+        
+        # Tüm uygun kişileri getir
+        if recipient_type == "all":
+            all_contacts = ContactModel.get_all_contacts(is_active=True)
+        else:
+            all_contacts = ContactModel.get_all_contacts(tags=tags, is_active=True)
+        
+        # Daha önce bu template'i almamış olanları filtrele
+        eligible_contacts = ContactModel.get_contacts_without_template(template_name, tags=tags if recipient_type == "tags" else None)
+        
+        stats = {
+            "total_recipients": len(all_contacts),
+            "already_sent": len(all_contacts) - len(eligible_contacts),
+            "will_send": len(eligible_contacts)
+        }
+        
+        return jsonify({
+            "success": True,
+            "stats": stats
+        })
+    except Exception as e:
+        logger.error(f"Bulk send preview error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/bulk-send", methods=["POST"])
+@login_required
+def api_bulk_send():
+    """Toplu mesaj gönderimi (duplicate kontrolü ile)"""
+    try:
+        data = request.get_json()
+        
+        template_name = data.get("template_name")
+        recipient_type = data.get("recipient_type", "all")
+        tags = data.get("tags", [])
+        
+        if not template_name:
+            return jsonify({"success": False, "error": "template_name gerekli"}), 400
+        
+        # Alıcıları belirle (daha önce almamış olanlar)
+        if recipient_type == "all":
+            recipients = ContactModel.get_contacts_without_template(template_name)
+        else:
+            recipients = ContactModel.get_contacts_without_template(template_name, tags=tags)
+        
+        if not recipients:
+            return jsonify({
+                "success": False,
+                "error": "Gönderilecek kişi bulunamadı (tümü daha önce almış)"
+            }), 400
+        
+        logger.info(f"🚀 Bulk send starting: {template_name} to {len(recipients)} recipients")
+        
+        # Gönderim yap
+        success_count = 0
+        failed_count = 0
+        skipped_count = 0
+        
+        for contact in recipients:
+            phone = contact["phone"]
+            
+            # Double check - tekrar kontrol
+            if ContactModel.has_received_template(phone, template_name):
+                skipped_count += 1
+                logger.warning(f"⏭️  Skipped (already sent): {phone}")
+                continue
+            
+            # Mesaj gönder
+            result = send_template_message(phone, template_name, language_code="tr")
+            
+            if result["success"]:
+                # Başarılı - template geçmişine ekle
+                ContactModel.add_sent_template(phone, template_name)
+                MessageModel.create_message(
+                    phone=phone,
+                    template_name=template_name,
+                    status="sent"
+                )
+                success_count += 1
+                logger.info(f"✅ Sent to {phone}")
+            else:
+                # Başarısız
+                MessageModel.create_message(
+                    phone=phone,
+                    template_name=template_name,
+                    status="failed",
+                    error_message=result.get("error", "Unknown error")
+                )
+                failed_count += 1
+                logger.error(f"❌ Failed to {phone}: {result.get('error')}")
+        
+        logger.info(f"✅ Bulk send completed: {success_count} success, {failed_count} failed, {skipped_count} skipped")
+        
+        return jsonify({
+            "success": True,
+            "template": template_name,
+            "results": {
+                "success": success_count,
+                "failed": failed_count,
+                "skipped": skipped_count,
+                "total": len(recipients)
+            }
+        })
+    except Exception as e:
+        logger.error(f"Bulk send error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return jsonify({"success": False, "error": str(e)}), 500
 
 # Only run Flask dev server when executed directly (not with gunicorn)

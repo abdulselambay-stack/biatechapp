@@ -23,6 +23,7 @@ class ContactModel:
             "name": name,
             "country": country,
             "tags": tags or [],
+            "sent_templates": [],  # Gönderilen template'ler
             "created_at": datetime.utcnow(),
             "updated_at": datetime.utcnow(),
             "is_active": True,
@@ -76,10 +77,46 @@ class ContactModel:
             contact['updated_at'] = datetime.utcnow()
             contact['is_active'] = contact.get('is_active', True)
             contact['tags'] = contact.get('tags', [])
+            contact['sent_templates'] = contact.get('sent_templates', [])
             contact['metadata'] = contact.get('metadata', {})
         
         result = ContactModel.get_collection().insert_many(contacts)
         return len(result.inserted_ids)
+    
+    @staticmethod
+    def add_sent_template(phone: str, template_name: str) -> bool:
+        """Kişiye gönderilen template'i ekle"""
+        result = ContactModel.get_collection().update_one(
+            {"phone": phone},
+            {
+                "$addToSet": {"sent_templates": template_name},
+                "$set": {"updated_at": datetime.utcnow()}
+            }
+        )
+        return result.modified_count > 0
+    
+    @staticmethod
+    def has_received_template(phone: str, template_name: str) -> bool:
+        """Kişi bu template'i daha önce aldı mı?"""
+        contact = ContactModel.get_collection().find_one(
+            {"phone": phone, "sent_templates": template_name}
+        )
+        return contact is not None
+    
+    @staticmethod
+    def get_contacts_without_template(template_name: str, tags: List[str] = None) -> List[Dict]:
+        """Belirli template'i almamış kişileri getir"""
+        query = {
+            "is_active": True,
+            "sent_templates": {"$ne": template_name}
+        }
+        if tags:
+            query["tags"] = {"$in": tags}
+        
+        contacts = list(ContactModel.get_collection().find(query))
+        for contact in contacts:
+            contact['_id'] = str(contact['_id'])
+        return contacts
 
 
 class MessageModel:

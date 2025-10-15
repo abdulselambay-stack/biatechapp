@@ -1,0 +1,379 @@
+{% extends "base.html" %}
+
+{% block title %}Toplu Gönderim - WhatsApp Cloud API{% endblock %}
+{% block page_title %}Toplu Mesaj Gönderimi{% endblock %}
+{% block page_subtitle %}Template'leri toplu olarak gönderin{% endblock %}
+
+{% block content %}
+<div class="space-y-6" x-data="bulkSend()">
+    
+    <!-- Warning Banner -->
+    <div class="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-lg">
+        <div class="flex items-start gap-3">
+            <svg class="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            <div>
+                <h4 class="font-semibold text-amber-900">Duplicate Kontrol Aktif</h4>
+                <p class="text-sm text-amber-700 mt-1">
+                    Seçtiğiniz template daha önce gönderilmiş kişilere tekrar gönderilmeyecektir.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Send Form -->
+    <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+        <form @submit.prevent="sendBulk()" class="space-y-6">
+            
+            <!-- Template Selection -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Template Seç *</label>
+                <select x-model="formData.template_name" required
+                        @change="loadRecipientStats()"
+                        class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
+                    <option value="">Seçiniz...</option>
+                    <template x-for="template in templates" :key="template.name">
+                        <option :value="template.name" x-text="`${template.name} (${template.language})`"></option>
+                    </template>
+                </select>
+            </div>
+
+            <!-- Recipient Type -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-3">Alıcı Seçimi *</label>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <button type="button" 
+                            @click="formData.recipient_type = 'all'; loadRecipientStats()"
+                            :class="formData.recipient_type === 'all' ? 'bg-green-50 border-green-500 ring-2 ring-green-500' : 'bg-white border-gray-300'"
+                            class="flex items-center gap-3 p-4 border-2 rounded-xl hover:border-green-500 transition-all">
+                        <div :class="formData.recipient_type === 'all' ? 'bg-green-500' : 'bg-gray-300'"
+                             class="w-5 h-5 rounded-full flex items-center justify-center">
+                            <svg x-show="formData.recipient_type === 'all'" class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                        </div>
+                        <div class="flex-1 text-left">
+                            <p class="font-semibold text-gray-900">Tüm Kişiler</p>
+                            <p class="text-sm text-gray-500">Tüm aktif kişilere gönder</p>
+                        </div>
+                    </button>
+
+                    <button type="button" 
+                            @click="formData.recipient_type = 'tags'; loadRecipientStats()"
+                            :class="formData.recipient_type === 'tags' ? 'bg-green-50 border-green-500 ring-2 ring-green-500' : 'bg-white border-gray-300'"
+                            class="flex items-center gap-3 p-4 border-2 rounded-xl hover:border-green-500 transition-all">
+                        <div :class="formData.recipient_type === 'tags' ? 'bg-green-500' : 'bg-gray-300'"
+                             class="w-5 h-5 rounded-full flex items-center justify-center">
+                            <svg x-show="formData.recipient_type === 'tags'" class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                        </div>
+                        <div class="flex-1 text-left">
+                            <p class="font-semibold text-gray-900">Tag'e Göre</p>
+                            <p class="text-sm text-gray-500">Belirli tag'lere gönder</p>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tag Selection (if tags selected) -->
+            <div x-show="formData.recipient_type === 'tags'" x-transition>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Tag Seç</label>
+                <div class="flex flex-wrap gap-2">
+                    <template x-for="tag in availableTags" :key="tag">
+                        <button type="button"
+                                @click="toggleTag(tag)"
+                                :class="formData.tags.includes(tag) ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-700'"
+                                class="px-4 py-2 rounded-lg font-medium hover:shadow-md transition-all">
+                            <span x-text="tag"></span>
+                            <span x-show="formData.tags.includes(tag)" class="ml-1">✓</span>
+                        </button>
+                    </template>
+                </div>
+                <p x-show="availableTags.length === 0" class="text-sm text-gray-500 mt-2">
+                    Henüz tag eklenmemiş
+                </p>
+            </div>
+
+            <!-- Stats Preview -->
+            <div x-show="stats.total_recipients > 0" x-transition class="bg-blue-50 border border-blue-200 rounded-xl p-6">
+                <h3 class="font-semibold text-blue-900 mb-4">📊 Gönderim Özeti</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-white rounded-lg p-4">
+                        <p class="text-sm text-gray-600 mb-1">Toplam Alıcı</p>
+                        <p class="text-2xl font-bold text-blue-600" x-text="stats.total_recipients">0</p>
+                    </div>
+                    <div class="bg-white rounded-lg p-4">
+                        <p class="text-sm text-gray-600 mb-1">Daha Önce Aldı</p>
+                        <p class="text-2xl font-bold text-amber-600" x-text="stats.already_sent">0</p>
+                    </div>
+                    <div class="bg-white rounded-lg p-4">
+                        <p class="text-sm text-gray-600 mb-1">Gönderilecek</p>
+                        <p class="text-2xl font-bold text-green-600" x-text="stats.will_send">0</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Submit -->
+            <div class="flex gap-4">
+                <button type="submit" 
+                        :disabled="sending || !formData.template_name || stats.will_send === 0"
+                        :class="sending || !formData.template_name || stats.will_send === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'"
+                        class="flex-1 px-6 py-4 text-white rounded-xl font-semibold transition-all shadow-lg">
+                    <span x-show="!sending">🚀 Toplu Gönderimi Başlat (<span x-text="stats.will_send"></span> kişi)</span>
+                    <span x-show="sending">
+                        <svg class="inline w-5 h-5 animate-spin mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        Gönderiliyor... (<span x-text="progress.current"></span>/<span x-text="progress.total"></span>)
+                    </span>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Progress -->
+    <div x-show="sending" x-transition class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+        <h3 class="font-semibold text-gray-900 mb-4">İlerleme Durumu</h3>
+        <div class="space-y-4">
+            <div>
+                <div class="flex justify-between text-sm mb-2">
+                    <span class="text-gray-600">Gönderim İlerlemesi</span>
+                    <span class="font-semibold" x-text="`${Math.round((progress.current / progress.total) * 100)}%`"></span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-3">
+                    <div class="bg-gradient-to-r from-green-500 to-emerald-500 h-3 rounded-full transition-all duration-300"
+                         :style="`width: ${(progress.current / progress.total) * 100}%`"></div>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-3 gap-4 text-center">
+                <div>
+                    <p class="text-2xl font-bold text-green-600" x-text="progress.success">0</p>
+                    <p class="text-sm text-gray-600">Başarılı</p>
+                </div>
+                <div>
+                    <p class="text-2xl font-bold text-red-600" x-text="progress.failed">0</p>
+                    <p class="text-sm text-gray-600">Başarısız</p>
+                </div>
+                <div>
+                    <p class="text-2xl font-bold text-amber-600" x-text="progress.skipped">0</p>
+                    <p class="text-sm text-gray-600">Atlandı</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results -->
+    <div x-show="showResults" x-transition class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+        <div class="text-center py-8">
+            <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg class="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+            </div>
+            <h3 class="text-2xl font-bold text-gray-900 mb-2">Toplu Gönderim Tamamlandı!</h3>
+            <p class="text-gray-600 mb-6">Mesajlarınız başarıyla gönderildi</p>
+            
+            <div class="grid grid-cols-3 gap-4 max-w-lg mx-auto mb-6">
+                <div class="bg-green-50 rounded-lg p-4">
+                    <p class="text-3xl font-bold text-green-600" x-text="results.success">0</p>
+                    <p class="text-sm text-gray-600">Başarılı</p>
+                </div>
+                <div class="bg-red-50 rounded-lg p-4">
+                    <p class="text-3xl font-bold text-red-600" x-text="results.failed">0</p>
+                    <p class="text-sm text-gray-600">Başarısız</p>
+                </div>
+                <div class="bg-amber-50 rounded-lg p-4">
+                    <p class="text-3xl font-bold text-amber-600" x-text="results.skipped">0</p>
+                    <p class="text-sm text-gray-600">Atlandı</p>
+                </div>
+            </div>
+
+            <button @click="resetForm()" 
+                    class="px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl font-medium transition-colors">
+                Yeni Gönderim Yap
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function bulkSend() {
+    return {
+        templates: [],
+        availableTags: [],
+        formData: {
+            template_name: '',
+            recipient_type: 'all',
+            tags: []
+        },
+        stats: {
+            total_recipients: 0,
+            already_sent: 0,
+            will_send: 0
+        },
+        sending: false,
+        showResults: false,
+        progress: {
+            current: 0,
+            total: 0,
+            success: 0,
+            failed: 0,
+            skipped: 0
+        },
+        results: {
+            success: 0,
+            failed: 0,
+            skipped: 0
+        },
+        
+        init() {
+            this.loadTemplates();
+            this.loadTags();
+        },
+        
+        async loadTemplates() {
+            try {
+                const response = await fetch('/api/templates');
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.templates = data.templates.filter(t => t.status === 'APPROVED');
+                    console.log(`✅ ${this.templates.length} template yüklendi`);
+                }
+            } catch (error) {
+                console.error('Template yükleme hatası:', error);
+            }
+        },
+        
+        async loadTags() {
+            try {
+                const response = await fetch('/api/contacts-mongo');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const allTags = new Set();
+                    data.contacts.forEach(c => {
+                        if (c.tags && Array.isArray(c.tags)) {
+                            c.tags.forEach(tag => allTags.add(tag));
+                        }
+                    });
+                    this.availableTags = Array.from(allTags).sort();
+                }
+            } catch (error) {
+                console.error('Tag yükleme hatası:', error);
+            }
+        },
+        
+        toggleTag(tag) {
+            const index = this.formData.tags.indexOf(tag);
+            if (index > -1) {
+                this.formData.tags.splice(index, 1);
+            } else {
+                this.formData.tags.push(tag);
+            }
+            this.loadRecipientStats();
+        },
+        
+        async loadRecipientStats() {
+            if (!this.formData.template_name) return;
+            
+            try {
+                const params = new URLSearchParams({
+                    template_name: this.formData.template_name,
+                    recipient_type: this.formData.recipient_type
+                });
+                
+                if (this.formData.tags.length > 0) {
+                    params.append('tags', this.formData.tags.join(','));
+                }
+                
+                const response = await fetch(`/api/bulk-send/preview?${params}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.stats = data.stats;
+                }
+            } catch (error) {
+                console.error('Stats yükleme hatası:', error);
+            }
+        },
+        
+        async sendBulk() {
+            if (!confirm(`${this.stats.will_send} kişiye "${this.formData.template_name}" template'ini göndermek istediğinize emin misiniz?`)) {
+                return;
+            }
+            
+            this.sending = true;
+            this.progress = {
+                current: 0,
+                total: this.stats.will_send,
+                success: 0,
+                failed: 0,
+                skipped: 0
+            };
+            
+            try {
+                const response = await fetch('/api/bulk-send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.formData)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Simulate progress (gerçekte server-sent events kullanılabilir)
+                    await this.simulateProgress(data.results);
+                    
+                    this.results = data.results;
+                    this.showResults = true;
+                } else {
+                    alert('❌ Hata: ' + data.error);
+                }
+            } catch (error) {
+                alert('❌ Bağlantı hatası: ' + error.message);
+            } finally {
+                this.sending = false;
+            }
+        },
+        
+        async simulateProgress(results) {
+            const total = results.success + results.failed + results.skipped;
+            const step = 100; // ms per step
+            
+            for (let i = 1; i <= total; i++) {
+                await new Promise(resolve => setTimeout(resolve, step));
+                this.progress.current = i;
+                
+                if (i <= results.success) {
+                    this.progress.success = i;
+                } else if (i <= results.success + results.failed) {
+                    this.progress.failed = i - results.success;
+                } else {
+                    this.progress.skipped = i - results.success - results.failed;
+                }
+            }
+        },
+        
+        resetForm() {
+            this.formData = {
+                template_name: '',
+                recipient_type: 'all',
+                tags: []
+            };
+            this.stats = {
+                total_recipients: 0,
+                already_sent: 0,
+                will_send: 0
+            };
+            this.showResults = false;
+        }
+    }
+}
+</script>
+{% endblock %}
