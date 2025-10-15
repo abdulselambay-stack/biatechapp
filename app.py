@@ -223,12 +223,34 @@ def send_template_message(phone_number: str, template_name: str, language_code: 
     
     try:
         response = requests.post(WHATSAPP_API_URL, headers=headers, json=payload, timeout=10)
+        
+        # Log response for debugging
+        logger.info(f"WhatsApp API Response: {response.status_code}")
+        
+        if response.status_code == 200:
+            return {
+                "success": True,
+                "status_code": response.status_code,
+                "response": response.json()
+            }
+        else:
+            error_data = response.json() if response.text else {}
+            error_msg = error_data.get("error", {}).get("message", "Unknown error")
+            logger.error(f"WhatsApp API Error: {error_msg}")
+            return {
+                "success": False,
+                "status_code": response.status_code,
+                "error": error_msg,
+                "response": error_data
+            }
+    except requests.Timeout:
+        logger.error(f"Timeout while sending to {phone_number}")
         return {
-            "success": response.status_code == 200,
-            "status_code": response.status_code,
-            "response": response.json()
+            "success": False,
+            "error": "Request timeout (10s)"
         }
     except Exception as e:
+        logger.error(f"Exception while sending to {phone_number}: {e}")
         return {
             "success": False,
             "error": str(e)

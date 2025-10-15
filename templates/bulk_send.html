@@ -108,16 +108,21 @@
             <!-- Submit -->
             <div class="flex gap-4">
                 <button type="submit" 
-                        :disabled="sending || !formData.template_name || stats.will_send === 0"
-                        :class="sending || !formData.template_name || stats.will_send === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'"
+                        x-show="!sending"
+                        :disabled="!formData.template_name || stats.will_send === 0"
+                        :class="!formData.template_name || stats.will_send === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'"
                         class="flex-1 px-6 py-4 text-white rounded-xl font-semibold transition-all shadow-lg">
-                    <span x-show="!sending">🚀 Toplu Gönderimi Başlat (<span x-text="stats.will_send"></span> kişi)</span>
-                    <span x-show="sending">
-                        <svg class="inline w-5 h-5 animate-spin mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
-                        Gönderiliyor... (<span x-text="progress.current"></span>/<span x-text="progress.total"></span>)
-                    </span>
+                    🚀 Toplu Gönderimi Başlat (<span x-text="stats.will_send"></span> kişi)
+                </button>
+                
+                <button type="button"
+                        x-show="sending"
+                        @click="stopSending()"
+                        class="flex-1 px-6 py-4 bg-red-500 hover:bg-red-600 text-white rounded-xl font-semibold transition-all shadow-lg">
+                    <svg class="inline w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                    Durdur (<span x-text="progress.current"></span>/<span x-text="progress.total"></span>)
                 </button>
             </div>
         </form>
@@ -239,6 +244,8 @@ function bulkSend() {
         showResults: false,
         autoScroll: true,
         sendLogs: [],
+        abortController: null,
+        shouldStop: false,
         progress: {
             current: 0,
             total: 0,
@@ -317,6 +324,7 @@ function bulkSend() {
             }
             
             this.sending = true;
+            this.shouldStop = false;
             this.sendLogs = [];
             this.progress = {
                 current: 0,
@@ -337,10 +345,14 @@ function bulkSend() {
                     limit: this.formData.limit_type === 'custom' ? this.formData.limit : null
                 };
                 
+                // AbortController for cancellation
+                this.abortController = new AbortController();
+                
                 const response = await fetch('/api/bulk-send', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify(payload),
+                    signal: this.abortController.signal
                 });
                 
                 const data = await response.json();
@@ -380,10 +392,26 @@ function bulkSend() {
                     alert('❌ Hata: ' + data.error);
                 }
             } catch (error) {
-                this.addLog(`❌ Bağlantı hatası: ${error.message}`, 'error');
-                alert('❌ Bağlantı hatası: ' + error.message);
+                if (error.name === 'AbortError') {
+                    this.addLog(`⏹️ Gönderim kullanıcı tarafından durduruldu`, 'info');
+                    alert('⏹️ Gönderim durduruldu');
+                } else {
+                    this.addLog(`❌ Bağlantı hatası: ${error.message}`, 'error');
+                    alert('❌ Bağlantı hatası: ' + error.message);
+                }
             } finally {
                 this.sending = false;
+                this.abortController = null;
+            }
+        },
+        
+        stopSending() {
+            if (confirm('Gönderimi durdurmak istediğinize emin misiniz?')) {
+                this.shouldStop = true;
+                if (this.abortController) {
+                    this.abortController.abort();
+                }
+                this.addLog(`⏹️ Durdurma isteği gönderildi...`, 'info');
             }
         },
         
