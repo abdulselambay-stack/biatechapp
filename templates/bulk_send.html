@@ -181,8 +181,18 @@
     </div>
 
     <!-- Progress -->
-    <div x-show="sending || (sendLogs.length > 0 && !showResults)" x-transition class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
-        <h3 class="font-semibold text-gray-900 mb-4">İlerleme Durumu</h3>
+    <div x-show="sending || sendLogs.length > 0" x-transition class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold text-gray-900">
+                <span x-show="sending">⏳ İlerleme Durumu</span>
+                <span x-show="!sending && sendLogs.length > 0">✅ Son Gönderim Özeti</span>
+            </h3>
+            <button x-show="!sending && sendLogs.length > 0" 
+                    @click="clearLogs()" 
+                    class="text-sm px-4 py-2 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg font-medium transition-colors">
+                🗑️ Tümünü Temizle
+            </button>
+        </div>
         <div class="space-y-4">
             <div>
                 <div class="flex justify-between text-sm mb-2">
@@ -214,18 +224,12 @@
             <div class="mt-6">
                 <div class="flex items-center justify-between mb-2">
                     <h4 class="font-semibold text-gray-900">📋 Detaylı Gönderim Log</h4>
-                    <div class="flex gap-2">
-                        <button @click="clearLogs()" 
-                                class="text-xs px-3 py-1 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg font-medium transition-colors">
-                            🗑️ Logları Temizle
-                        </button>
-                        <button @click="autoScroll = !autoScroll" 
-                                :class="autoScroll ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'"
-                                class="text-xs px-3 py-1 rounded-lg font-medium">
-                            <span x-show="autoScroll">🔄 Otomatik Kaydırma: Açık</span>
-                            <span x-show="!autoScroll">⏸️ Otomatik Kaydırma: Kapalı</span>
-                        </button>
-                    </div>
+                    <button @click="autoScroll = !autoScroll" 
+                            :class="autoScroll ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'"
+                            class="text-xs px-3 py-1 rounded-lg font-medium">
+                        <span x-show="autoScroll">🔄 Otomatik Kaydırma: Açık</span>
+                        <span x-show="!autoScroll">⏸️ Otomatik Kaydırma: Kapalı</span>
+                    </button>
                 </div>
                 <div id="sendLog" 
                      class="bg-gray-900 text-gray-100 rounded-lg p-4 h-96 overflow-y-auto font-mono text-sm space-y-1">
