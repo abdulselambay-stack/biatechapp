@@ -73,6 +73,24 @@
                 </div>
             </div>
 
+            <!-- Rate Limit Selection -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                    ⏱️ Gönderim Hızı (Dakikada Kaç Mesaj?) *
+                    <span class="text-xs text-gray-500 font-normal">- Spam'a girmemek için</span>
+                </label>
+                <select x-model="formData.rate_limit_per_minute" 
+                        class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500">
+                    <option value="20">Yağış (20 mesaj/dakika - Her 3 saniyede 1)</option>
+                    <option value="40">Orta (40 mesaj/dakika - Her 1.5 saniyede 1)</option>
+                    <option value="60" selected>Hızlı (60 mesaj/dakika - Her saniyede 1)</option>
+                    <option value="80">Maksimum (80 mesaj/dakika - 0.75 saniyede 1)</option>
+                </select>
+                <p class="text-xs text-gray-500 mt-1">
+                    <span class="text-amber-600">⚠️</span> Önerilen: 40-60 mesaj/dakika (WhatsApp limitleri için güvenli)
+                </p>
+            </div>
+
             <!-- Limit Selection -->
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-3">Kaç Kişiye Gönderilsin? *</label>
@@ -163,7 +181,7 @@
     </div>
 
     <!-- Progress -->
-    <div x-show="sending" x-transition class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+    <div x-show="sending || (sendLogs.length > 0 && !showResults)" x-transition class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
         <h3 class="font-semibold text-gray-900 mb-4">İlerleme Durumu</h3>
         <div class="space-y-4">
             <div>
@@ -196,12 +214,18 @@
             <div class="mt-6">
                 <div class="flex items-center justify-between mb-2">
                     <h4 class="font-semibold text-gray-900">📋 Detaylı Gönderim Log</h4>
-                    <button @click="autoScroll = !autoScroll" 
-                            :class="autoScroll ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'"
-                            class="text-xs px-3 py-1 rounded-lg font-medium">
-                        <span x-show="autoScroll">🔄 Otomatik Kaydırma: Açık</span>
-                        <span x-show="!autoScroll">⏸️ Otomatik Kaydırma: Kapalı</span>
-                    </button>
+                    <div class="flex gap-2">
+                        <button @click="clearLogs()" 
+                                class="text-xs px-3 py-1 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg font-medium transition-colors">
+                            🗑️ Logları Temizle
+                        </button>
+                        <button @click="autoScroll = !autoScroll" 
+                                :class="autoScroll ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'"
+                                class="text-xs px-3 py-1 rounded-lg font-medium">
+                            <span x-show="autoScroll">🔄 Otomatik Kaydırma: Açık</span>
+                            <span x-show="!autoScroll">⏸️ Otomatik Kaydırma: Kapalı</span>
+                        </button>
+                    </div>
                 </div>
                 <div id="sendLog" 
                      class="bg-gray-900 text-gray-100 rounded-lg p-4 h-96 overflow-y-auto font-mono text-sm space-y-1">
@@ -487,7 +511,8 @@ function bulkSend() {
             template_name: '',
             header_image_id: '',
             limit_type: 'all',
-            limit: null
+            limit: null,
+            rate_limit_per_minute: 60  // Default: 60 mesaj/dakika
         },
         stats: {
             total_recipients: 0,
@@ -658,7 +683,8 @@ function bulkSend() {
             
             this.sending = true;
             this.shouldStop = false;
-            this.sendLogs = [];
+            // sendLogs'u temizleme - eski logları sakla
+            // this.sendLogs = [];  // KALDIRILDI - loglar kalacak
             this.progress = {
                 current: 0,
                 total: this.stats.will_send,
@@ -676,7 +702,8 @@ function bulkSend() {
                 const payload = {
                     template_name: this.formData.template_name,
                     limit: this.formData.limit_type === 'custom' ? this.formData.limit : null,
-                    header_image_id: this.formData.header_image_id || ''
+                    header_image_id: this.formData.header_image_id || '',
+                    rate_limit_per_minute: parseInt(this.formData.rate_limit_per_minute) || 60
                 };
                 
                 // AbortController for cancellation
@@ -772,19 +799,27 @@ function bulkSend() {
             }
         },
         
+        clearLogs() {
+            if (confirm('Tüm logları temizlemek istediğinize emin misiniz?')) {
+                this.sendLogs = [];
+            }
+        },
+        
         resetForm() {
             this.formData = {
                 template_name: '',
                 header_image_id: '',
                 limit_type: 'all',
-                limit: null
+                limit: null,
+                rate_limit_per_minute: 60
             };
             this.stats = {
                 total_recipients: 0,
                 already_sent: 0,
                 will_send: 0
             };
-            this.sendLogs = [];
+            // sendLogs'u sıfırlama - kullanıcı manuel temizleyebilir
+            // this.sendLogs = [];  // KALDIRILDI
             this.showResults = false;
         },
         

@@ -8,6 +8,7 @@ from routes.auth import login_required
 from models import ContactModel, MessageModel, ChatModel, TemplateSettingsModel
 from utils import send_template_message
 import logging
+import time
 
 bulk_send_bp = Blueprint('bulk_send', __name__)
 logger = logging.getLogger(__name__)
@@ -120,7 +121,12 @@ def api_bulk_send():
             except (ValueError, TypeError):
                 pass
         
+        # Rate limiting ayarları (dakikada max istek)
+        RATE_LIMIT_PER_MINUTE = data.get("rate_limit_per_minute", 60)  # Default: 60 mesaj/dakika
+        DELAY_BETWEEN_MESSAGES = 60.0 / RATE_LIMIT_PER_MINUTE if RATE_LIMIT_PER_MINUTE > 0 else 1.0
+        
         logger.info(f"🚀 Bulk send starting: {template_name} to {len(recipients)} recipients")
+        logger.info(f"⏱️ Rate limit: {RATE_LIMIT_PER_MINUTE} mesaj/dakika (Her mesaj arası: {DELAY_BETWEEN_MESSAGES:.2f}s)")
         
         # Gönderim yap
         success_count = 0
@@ -130,6 +136,7 @@ def api_bulk_send():
         
         # Progress logging
         total_recipients = len(recipients)
+        start_time = time.time()
         
         for i, contact in enumerate(recipients, 1):
             phone = contact["phone"]
@@ -137,10 +144,16 @@ def api_bulk_send():
             
             # Progress log (her 10 mesajda bir)
             if i % 10 == 0 or i == total_recipients:
-                logger.info(f"📊 Progress: {i}/{total_recipients} ({(i/total_recipients*100):.1f}%) - ✅ {success_count} ❌ {failed_count}")
+                elapsed_time = time.time() - start_time
+                messages_per_sec = i / elapsed_time if elapsed_time > 0 else 0
+                logger.info(f"📊 Progress: {i}/{total_recipients} ({(i/total_recipients*100):.1f}%) - ✅ {success_count} ❌ {failed_count} - Hız: {messages_per_sec:.2f} msg/s")
             
             # Mesaj gönder (image_id ile)
             result = send_template_message(phone, template_name, language_code="tr", header_image_id=header_image_id)
+            
+            # Rate limiting delay (son mesajdan sonra bekleme)
+            if i < total_recipients:
+                time.sleep(DELAY_BETWEEN_MESSAGES)
             
             if result["success"]:
                 # ✅ BAŞARILI - template geçmişine ekle
