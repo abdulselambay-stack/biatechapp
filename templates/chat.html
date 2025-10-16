@@ -728,7 +728,7 @@ function chat() {
             }
             
             try {
-                const response = await fetch('/api/send', {
+                const response = await fetch('/api/send-template', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1000,7 +1000,7 @@ function chat() {
             this.newMessage = ''; // Hemen temizle
             
             try {
-                const response = await fetch('/api/chat/send', {
+                const response = await fetch('/api/send-message', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
